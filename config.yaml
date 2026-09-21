@@ -1,0 +1,56 @@
+# Which figures to make, and whether to rebuild data/ from the raw sources first.
+figures: {1: true, 2: true, 3: true, 4: true, rt_bonus: true}
+run_analysis: false
+
+# Whether each figure draws significance brackets/asterisks on its boxplots (Mann-Whitney U for
+# independent groups, Wilcoxon signed-rank for paired-by-session comparisons, Holm-corrected
+# within each panel). The underlying tests always run and are always written to
+# figures/<fig>_stats.csv regardless of this setting -- it only controls the bars on the plot.
+stats_bars: {1: false, 2: false, 3: true, 4: true, rt_bonus: false}
+
+# Publication style, shared by every figure (see scripts/utils.py:apply_style).
+style:
+  font_family: [Arial, DejaVu Sans]
+  font_size: 14
+  title_size: 18
+  label_size: 16
+  tick_size: 13
+  legend_size: 12
+  panel_label_size: 22
+  line_width: 2.5
+  axes_line_width: 1.5
+  marker_size: 40
+  dpi: 300
+  palette:
+    bend: '#111111'
+    index_angle: '#2a78d6'
+    pip_y: '#1baf7a'
+    mrs_x: '#eb6834'
+    freebie: '#2a78d6'
+    target_hit: '#d9d9d9'
+    target_miss: '#f6c5c5'
+    budget: '#d62728'
+    frame_acq: '#0a11c4'
+    inference: '#519bc6'
+    sender: '#2ccded'
+    pickup: '#0a11c4'
+    work: '#519bc6'
+    tail: '#2ccded'
+    e2e: '#757272'
+    old: '#757272'
+    new_rt: '#1baf7a'
+    keypoints: ['#FF4444', '#FF9900', '#33CC33', '#3399FF', '#B455E0']   # DIP PIP MCP WRIST MRS
+
+# ---- analysis input: the master folder every figure is rebuilt from (master.pkl + nwb/<run>.nwb) ----
+master: data/master
+neuraldecoding_path: ~/Code/neuraldecoding      # clone of the lab's neuraldecoding repo (NWB loading, metrics, KF)
+
+# Example sessions used by single-session panels.
+examples:
+  latency_session: 20260227-1020
+  latency_skip_first_frames: 1     # drop GPU warm-up frames before pooling
+  latency_window_frames: 9000        # frames shown in the per-actor trace
+  rt_best_session: 20260917-1557     # lowest mean e2e of the Sept 17 real-time runs with per-actor logs
+  hand_control_trace: {session: 20260213-1028, first_trial: null, n_trials: 8}   # null = auto, inside Freebie coverage
+  freebie_decoder_trace: {run: 20260227_Run-007, first_trial: null, n_trials: 8}     # Freebie KF
+  bend_decoder_trace: {run: 20251216_Run-003, first_trial: null, n_trials: 8}    # KF trained on bend sensors
