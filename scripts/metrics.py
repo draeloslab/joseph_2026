@@ -23,8 +23,16 @@ def path_efficiency(pos):
 def run_metrics(nwb, closed, dofs):
     """
     Per-run means over the trials that belong to the run's mode (hand control: finger_angles, closed loop:
-    decode), plus a per-trial dataframe (success, and time-to-target/orbiting/path-efficiency for the
-    successful ones) the means above are computed from.
+    decode), plus a per-trial dataframe the means above are computed from:
+      - bitrate_bits_per_s: the library's own per-trial throughput (bitrate/bitrate_zstruct already
+        return one value per trial, NaN on excluded/failed/in-target trials) -- a real per-trial number,
+        not an average.
+      - success_rate, targets_per_s: neither has a per-trial value in the library (success is a single
+        0/1 per trial, targets/s is only defined over a whole run's total time), so these are a running
+        cumulative rate instead -- successes-so-far / trials-so-far, and targets-so-far / elapsed-time-so-far
+        -- which converges to the run's aggregate value and reads far better as a per-trial curve than raw
+        0/1 success flags would.
+      - time_to_target_s / orbiting_time_s / path_efficiency: real per-trial values (successful trials only).
     """
     from neuraldecoding.utils.online_metrics import (bitrate, bitrate_zstruct, get_timeseries_from_trial, success_rate,
                                                      success_rate_zstruct, targets_per_second_zstruct)
@@ -42,11 +50,17 @@ def run_metrics(nwb, closed, dofs):
                        target_label='target', target_radius_label='target_radius', exclude_failed_trials=True,
                        exclude_intarget_trials=True, pos_indices=list(dofs))
         rate, _ = success_rate(nwb, success_field='success', exclude_trials=np.flatnonzero(~tr['in_mode'].to_numpy()))
+    bits = np.asarray(bits, float)                          # one entry per NWB trial (NaN where excluded)
+    durations = (tr['stop_time'] - tr['start_time']).to_numpy()
 
-    trial_rows = []
-    for i in np.flatnonzero(tr['in_mode'].to_numpy()):               # one row per in-mode trial
+    trial_rows, n_success, n_seen, target_time = [], 0, 0, 0.0
+    for i in np.flatnonzero(tr['in_mode'].to_numpy()):               # one row per in-mode trial, in order
         success = bool(tr['success'][i])
-        row = {'trial': int(i), 'success': success,
+        n_seen += 1
+        n_success += success
+        target_time += durations[i]
+        row = {'trial': int(i), 'success': success, 'bitrate_bits_per_s': bits[i],
+               'success_rate_running': n_success / n_seen, 'targets_per_s_running': n_seen / target_time,
                'time_to_target_s': np.nan, 'orbiting_time_s': np.nan, 'path_efficiency': np.nan}
         if success:                                                  # ttt/orbit/path only defined for hits
             pos = get_timeseries_from_trial(nwb, i, path)[:, cols]
@@ -55,9 +69,11 @@ def run_metrics(nwb, closed, dofs):
             row['orbiting_time_s'] = max(len(pos) * dt - tr['hold_time'][i] - t_in, 0.0)   # stop_time is the last sample
             row['path_efficiency'] = path_efficiency(pos)
         trial_rows.append(row)
-    trials = pd.DataFrame(trial_rows, columns=['trial', 'success', 'time_to_target_s', 'orbiting_time_s', 'path_efficiency'])
+    trials = pd.DataFrame(trial_rows, columns=['trial', 'success', 'bitrate_bits_per_s', 'success_rate_running',
+                                               'targets_per_s_running', 'time_to_target_s', 'orbiting_time_s',
+                                               'path_efficiency'])
 
-    agg = {'n_trials': int(tr['in_mode'].sum()), 'success_rate': rate, 'bitrate_bits_per_s': np.nanmean(np.asarray(bits, float)),
+    agg = {'n_trials': int(tr['in_mode'].sum()), 'success_rate': rate, 'bitrate_bits_per_s': np.nanmean(bits),
            'targets_per_s': targets_per_second_zstruct(nwb), 'time_to_target_s': trials['time_to_target_s'].mean(),
            'orbiting_time_s': trials['orbiting_time_s'].mean(), 'path_efficiency': trials['path_efficiency'].mean()}
     return agg, trials

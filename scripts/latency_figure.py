@@ -7,9 +7,8 @@ from utils import COLORS, DATA, FRAME_BUDGET_MS, boxes, compose, load_master, si
 ACTORS = [('frame_acq', 'Frame acquisition'), ('inference', 'Inference'),
           ('sender', 'Sender'), ('e2e', 'End-to-end')]
 
-LAYOUT = [['hist', 'actors'],
-          ['stages', 'stages']]
-SIZE = (16, 11)
+LAYOUT = [['hist', 'stages']]   # panel B (actors, the per-actor example trace) hidden for now: A and C side by side
+SIZE = (18, 6.5)
 RT_LAYOUT = [['hist', 'actors', 'old_vs_new']]
 RT_SIZE = (21, 5.5)
 
@@ -90,13 +89,12 @@ def panel_actors(ax, d):
 
 
 def panel_stages(ax, d):
-    # per actor: mean over sessions (n sessions, one point each). Real-time tuned: only one session exists, so
-    # its box is every individual frame's e2e latency instead, with all frames shown as dots.
-    groups = [(f'{label}\n(session means)', d['stages'][key]) for key, label in ACTORS]
-    groups.append((f"Real-time tuned\n(frames, {d['rt']['session']})", d['rt']['e2e']))
+    # per actor: mean over sessions (one point each). Real-time tuned: only one session exists, so its box
+    # is every individual frame's e2e latency instead (all frames shown as dots), not a mean.
+    groups = [(label, d['stages'][key]) for key, label in ACTORS] + [('Real-time tuned', d['rt']['e2e'])]
     colors = [COLORS[k] for k, _ in ACTORS] + [COLORS['new_rt']]
     boxes(ax, groups, colors, ylabel='Processing time (ms)',
-          title=f"Per-actor processing time across sessions (n={len(d['stages'])}) vs real-time tuned per-frame e2e")
+          title=f"Per actor: session means (n={len(d['stages'])})\nvs real-time tuned: per frame ({d['rt']['session']})")
     ax.axhline(FRAME_BUDGET_MS, color=COLORS['budget'], ls='--', label='30 FPS budget')
     ax.set_ylim(0, max(FRAME_BUDGET_MS * 1.15, np.percentile(d['rt']['e2e'], 99.5)))
     ax.legend(loc='center left')
@@ -125,12 +123,15 @@ def panel_old_vs_new(ax, d):
     significance(ax, [('Previous sessions', data[0]), ('Real-time tuned', data[1])])
 
 
-PANELS = {'hist': panel_hist, 'actors': panel_actors, 'stages': panel_stages}
+# panel_actors (the per-actor example trace, panel B) isn't in PANELS/LAYOUT right now -- see LAYOUT above
+# -- but stays defined and reachable if it comes back; LABELS keeps A/C so it's clear B was skipped on purpose.
+PANELS = {'hist': panel_hist, 'stages': panel_stages}
+LABELS = {'hist': 'A', 'stages': 'C'}
 RT_PANELS = {'hist': panel_rt_hist, 'actors': panel_rt_actors, 'old_vs_new': panel_old_vs_new}
 
 
 def make_figure(cfg):
-    return compose(LAYOUT, PANELS, load(), SIZE, 'fig2_latency', stats_bars=cfg['stats_bars'][2])
+    return compose(LAYOUT, PANELS, load(), SIZE, 'fig2_latency', labels=LABELS, stats_bars=cfg['stats_bars'][2])
 
 
 def make_rt_figure(cfg):

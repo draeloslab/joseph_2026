@@ -15,7 +15,8 @@ LAYOUT = [['trace_1'] * 4,
           ['trace_3'] * 4,
           ['corr', 'success_rate', 'bitrate_bits_per_s', 'targets_per_s'],
           ['.', 'time_to_target_s', 'orbiting_time_s', 'path_efficiency']]
-SIZE = (20, 18)
+SIZE = (20, 14)
+HEIGHT_RATIOS = [0.55, 0.55, 1, 1]   # panel A (the two example traces) was dominating the figure; shrink it
 
 
 # ---------------------------------------------------------------- analysis
@@ -67,7 +68,7 @@ def panel_trace(ax, d, dof):
     lines += [(tr[f'{key}_t'], tr[key], label, COLORS[key], 2) for key, label in SIGNALS[dof]]
     target_trace(ax, d['ex_trials'], f'target_{dof}', lines, f"{'Index' if dof == 1 else 'MRS'}\nposition (a.u.)")
     if dof == 1:
-        ax.set_title(f"Hand control example ({tr['session']})")
+        ax.set_title(f"Hand control example ({tr['session']})", pad=34)   # clear the legend row above the axes
 
 
 def panel_corr(ax, d):
@@ -90,4 +91,4 @@ LABELS = {'trace_1': 'A', 'corr': 'B', 'success_rate': 'C'}
 
 def make_figure(cfg):
     return compose(LAYOUT, PANELS, load(cfg), SIZE, 'fig3_hand_control', labels=LABELS,
-                   stats_bars=cfg['stats_bars'][3])
+                   stats_bars=cfg['stats_bars'][3], height_ratios=HEIGHT_RATIOS)

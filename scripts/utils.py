@@ -45,18 +45,20 @@ def apply_style(cfg):
     COLORS['_panel_label_size'] = s['panel_label_size']
 
 
-def compose(layout, panels, data, size, name, labels=None, stats_bars=True):
+def compose(layout, panels, data, size, name, labels=None, stats_bars=True, height_ratios=None, width_ratios=None):
     """
     Build one figure from a subplot_mosaic layout. `panels` maps mosaic key -> panel
     function(ax, data). `labels` maps key -> panel letter (default: A, B, ... in `panels`
-    order). Rearranging a figure only means editing `layout`. `stats_bars` (from
-    config.yaml's `stats_bars`) controls whether significance() draws its bracket/asterisks
-    on this figure; the underlying tests are always run and always written to the stats csv.
+    order). Rearranging a figure only means editing `layout`; to make some rows/columns
+    bigger or smaller than others (equal by default), pass `height_ratios`/`width_ratios`
+    (one number per row/column of `layout`). `stats_bars` (from config.yaml's `stats_bars`)
+    controls whether significance() draws its bracket/asterisks on this figure; the
+    underlying tests are always run and always written to the stats csv.
     """
     global SHOW_BARS
     SHOW_BARS = stats_bars
     fig = plt.figure(figsize=size, layout='constrained')
-    axd = fig.subplot_mosaic(layout)
+    axd = fig.subplot_mosaic(layout, height_ratios=height_ratios, width_ratios=width_ratios)
     STATS.clear()
     for key, fn in panels.items():
         n_before = len(STATS)
@@ -91,10 +93,12 @@ def boxes(ax, groups, colors, ylabel=None, title=None, test=None, log=False):
     bp = ax.boxplot(data, tick_labels=[f'{l}\n(n={len(d)})' for (l, _), d in zip(groups, data)],
                     widths=0.55, patch_artist=True, showfliers=False,
                     medianprops={'color': '#111111', 'lw': 2})
+    if len(groups) > 3:      # more than ~3 tick labels crowd/overlap at a normal panel width
+        plt.setp(ax.get_xticklabels(), rotation=20, ha='right', rotation_mode='anchor')
     rng = np.random.default_rng(0)
     for i, (patch, d, c) in enumerate(zip(bp['boxes'], data, colors)):
         patch.set(facecolor=c, alpha=0.3, edgecolor='#444444')
-        ax.scatter(rng.normal(i + 1, 0.06, len(d)), d, color=c, alpha=0.85, zorder=3)
+        ax.scatter(rng.normal(i + 1, 0.06, len(d)), d, s=6, color=c, alpha=0.35, zorder=3, linewidths=0)
     if log:
         ax.set_yscale('log')
     ax.grid(axis='y', color='#ececec')
@@ -199,7 +203,8 @@ def target_trace(ax, trials, dof_col, series, ylabel):
     ax.set_ylim(-0.1, 1.1)
     ax.set_ylabel(ylabel)
     ax.set_xlabel('Time (s)')
-    ax.legend(loc='upper right', ncol=len(series))
+    # above the axes, not inside it -- inside overlaps the traces/target boxes once the panel is short
+    ax.legend(loc='lower left', bbox_to_anchor=(0, 1.01, 1, 0.15), mode='expand', ncol=len(series), borderaxespad=0)
 
 
 # ---------------------------------------------------------------- the master folder
@@ -251,9 +256,12 @@ ONLINE_METRICS = {'success_rate': 'Success rate', 'bitrate_bits_per_s': 'Bit rat
                   'targets_per_s': 'Targets / s', 'time_to_target_s': 'Time to target (s)',
                   'orbiting_time_s': 'Orbiting time (s)', 'path_efficiency': 'Path efficiency'}
 
-# online metrics with a per-trial value in run_trial_metrics.csv (success is 1/0 per trial). bitrate and
-# targets/s are only defined over a whole run's trials, so they have no per-trial column and stay per-run.
-ONLINE_TRIAL_COLS = {'success_rate': 'success', 'time_to_target_s': 'time_to_target_s',
+# every online metric's column in run_trial_metrics.csv. bitrate_bits_per_s and the ttt/orbit/path
+# metrics are real per-trial values; success_rate and targets_per_s have no natural per-trial value (one
+# is a single 0/1, the other only defined over a whole run) so theirs is a running cumulative rate instead
+# (see metrics.run_metrics) -- successes-so-far/trials-so-far, targets-so-far/elapsed-time-so-far.
+ONLINE_TRIAL_COLS = {'success_rate': 'success_rate_running', 'bitrate_bits_per_s': 'bitrate_bits_per_s',
+                     'targets_per_s': 'targets_per_s_running', 'time_to_target_s': 'time_to_target_s',
                      'orbiting_time_s': 'orbiting_time_s', 'path_efficiency': 'path_efficiency'}
 
 FEATURE_CUTOFF = '20260227'    # first day pip_y was used to drive online Freebie runs; index_angle before it
