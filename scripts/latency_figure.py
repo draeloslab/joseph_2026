@@ -32,6 +32,8 @@ def analyze(cfg):
     np.savez(DATA / 'latency_example_actors.npz', session=sid,
              **{k: v[:n] for k, v in sessions[sid]['actors'].items()})
 
+    analyze_rt(cfg)      # fig2's hist/stages panels now also show the real-time tuned session
+
 
 def analyze_rt(cfg):
     sid = cfg['examples']['rt_best_session']
@@ -40,9 +42,9 @@ def analyze_rt(cfg):
 
 def load(rt=False):
     pooled = np.load(DATA / 'e2e_pooled.npz')
-    d = {'e2e': pooled['e2e_ms'], 'n_sessions': int(pooled['n_sessions'])}
+    d = {'e2e': pooled['e2e_ms'], 'n_sessions': int(pooled['n_sessions']), 'rt': dict(np.load(DATA / 'rt_best_actors.npz'))}
     if rt:
-        return d | {'rt': dict(np.load(DATA / 'rt_best_actors.npz'))}
+        return d
     return d | {'stages': pd.read_csv(DATA / 'latency_stage_summary.csv'),
                 'actors': dict(np.load(DATA / 'latency_example_actors.npz'))}
 
@@ -71,7 +73,16 @@ def actor_panel(ax, a, title):
 
 
 def panel_hist(ax, d):
-    e2e_hist(ax, d['e2e'], f"All sessions ({d['n_sessions']} sessions, {len(d['e2e']):,} frames)", COLORS['e2e'])
+    ax.hist(d['e2e'], bins=np.arange(0, 80.5, 0.5), color=COLORS['e2e'], alpha=0.6,
+            label=f"All sessions (n={d['n_sessions']}, {len(d['e2e']):,} frames)")
+    ax.hist(d['rt']['e2e'], bins=np.arange(0, 80.5, 0.5), color=COLORS['new_rt'], alpha=0.6,
+            label=f"Real-time tuned ({d['rt']['session']}, {len(d['rt']['e2e']):,} frames)")
+    ax.axvline(FRAME_BUDGET_MS, color=COLORS['budget'], ls='--', label=f'30 FPS budget ({FRAME_BUDGET_MS:.1f} ms)')
+    ax.axvline(np.median(d['e2e']), color='#111111', ls=':', label=f"Median (all sessions) {np.median(d['e2e']):.1f} ms")
+    ax.set_xlabel('End-to-end latency (ms)')
+    ax.set_ylabel('Frames')
+    ax.set_title('End-to-end latency distribution')
+    ax.legend()
 
 
 def panel_actors(ax, d):
@@ -79,10 +90,15 @@ def panel_actors(ax, d):
 
 
 def panel_stages(ax, d):
-    boxes(ax, [(label, d['stages'][key]) for key, label in ACTORS], [COLORS[k] for k, _ in ACTORS],
-          ylabel='Mean per session (ms)', title=f"Per-actor processing time across sessions (n={len(d['stages'])})")
+    # per actor: mean over sessions (n sessions, one point each). Real-time tuned: only one session exists, so
+    # its box is every individual frame's e2e latency instead, with all frames shown as dots.
+    groups = [(f'{label}\n(session means)', d['stages'][key]) for key, label in ACTORS]
+    groups.append((f"Real-time tuned\n(frames, {d['rt']['session']})", d['rt']['e2e']))
+    colors = [COLORS[k] for k, _ in ACTORS] + [COLORS['new_rt']]
+    boxes(ax, groups, colors, ylabel='Processing time (ms)',
+          title=f"Per-actor processing time across sessions (n={len(d['stages'])}) vs real-time tuned per-frame e2e")
     ax.axhline(FRAME_BUDGET_MS, color=COLORS['budget'], ls='--', label='30 FPS budget')
-    ax.set_ylim(0, FRAME_BUDGET_MS * 1.15)
+    ax.set_ylim(0, max(FRAME_BUDGET_MS * 1.15, np.percentile(d['rt']['e2e'], 99.5)))
     ax.legend(loc='center left')
 
 

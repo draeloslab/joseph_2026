@@ -251,8 +251,49 @@ ONLINE_METRICS = {'success_rate': 'Success rate', 'bitrate_bits_per_s': 'Bit rat
                   'targets_per_s': 'Targets / s', 'time_to_target_s': 'Time to target (s)',
                   'orbiting_time_s': 'Orbiting time (s)', 'path_efficiency': 'Path efficiency'}
 
+# online metrics with a per-trial value in run_trial_metrics.csv (success is 1/0 per trial). bitrate and
+# targets/s are only defined over a whole run's trials, so they have no per-trial column and stay per-run.
+ONLINE_TRIAL_COLS = {'success_rate': 'success', 'time_to_target_s': 'time_to_target_s',
+                     'orbiting_time_s': 'orbiting_time_s', 'path_efficiency': 'path_efficiency'}
 
-def metric_panel(ax, groups, metric):
-    """groups: list of (label, runs df, color); one box per group of session-average `metric`."""
-    boxes(ax, [(label, g[metric]) for label, g, _ in groups], [c for *_, c in groups],
-          ylabel=ONLINE_METRICS[metric], test='independent')
+FEATURE_CUTOFF = '20260227'    # first day pip_y was used to drive online Freebie runs; index_angle before it
+
+
+def online_feature(sessions):
+    """The Freebie signal driving an online run, from its (comma-joined) session id(s)."""
+    return 'pip_y' if sessions.split(',')[0] >= FEATURE_CUTOFF else 'index_angle'
+
+
+def split_groups(runs, split_feature=False, split_dof=False):
+    """
+    Bend vs Freebie groups from a run_metrics-shaped dataframe (needs freebie, sessions, n_dof columns),
+    optionally split further: split_feature separates Freebie runs by which signal (index_angle / pip_y,
+    see online_feature) drove them; split_dof separates every group into 1 DOF / 2 DOF. Returns
+    [(label, runs df, color), ...] for metric_panel / boxes.
+    """
+    bend, free = runs[~runs['freebie']], runs[runs['freebie']]
+    if split_feature:
+        feature = free['sessions'].map(online_feature)
+        groups = [('Bend sensor', bend, COLORS['bend']),
+                  ('Freebie\n(index angle)', free[feature == 'index_angle'], COLORS['index_angle']),
+                  ('Freebie\n(PIP y)', free[feature == 'pip_y'], COLORS['pip_y'])]
+    else:
+        groups = [('Bend sensor', bend, COLORS['bend']), ('Freebie', free, COLORS['freebie'])]
+    if not split_dof:
+        return groups
+    return [(f'{label} {n}DOF', g[g['n_dof'] == n], c) for label, g, c in groups for n in (1, 2)]
+
+
+def metric_panel(ax, groups, metric, trials=None):
+    """
+    groups: list of (label, runs df, color), each df a subset of run_metrics.csv (see split_groups).
+    One box per group. `trials`: run_trial_metrics.csv, to plot every trial's value (all dots) instead
+    of one session/run-average point per run, for the metrics that have a per-trial column
+    (ONLINE_TRIAL_COLS); groups without a per-trial column always use per-run means.
+    """
+    col = ONLINE_TRIAL_COLS.get(metric)
+    if trials is not None and col is not None:
+        data = [(label, trials[trials['run_id'].isin(g['run_id'])][col]) for label, g, _ in groups]
+    else:
+        data = [(label, g[metric]) for label, g, _ in groups]
+    boxes(ax, data, [c for *_, c in groups], ylabel=ONLINE_METRICS[metric], test='independent')

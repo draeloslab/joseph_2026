@@ -89,12 +89,12 @@ def panel_hist(ax, d):
 
 def panel_box(ax, d):
     data = [d['errors'][kp] for kp in KEYPOINTS]
-    bp = ax.boxplot(data, tick_labels=KEYPOINTS, widths=0.55, patch_artist=True,
-                    flierprops={'marker': '.', 'markersize': 3, 'markerfacecolor': '#888888',
-                                'markeredgecolor': 'none', 'alpha': 0.5},
+    bp = ax.boxplot(data, tick_labels=KEYPOINTS, widths=0.55, patch_artist=True, showfliers=False,
                     medianprops={'color': '#111111', 'lw': 2})
-    for patch, c in zip(bp['boxes'], COLORS['keypoints']):
+    rng = np.random.default_rng(0)
+    for i, (patch, x, c) in enumerate(zip(bp['boxes'], data, COLORS['keypoints'])):
         patch.set(facecolor=c, alpha=0.6, edgecolor='#444444')
+        ax.scatter(rng.normal(i + 1, 0.06, len(x)), x, s=6, color=c, alpha=0.35, zorder=2, linewidths=0)
     ax.scatter(np.arange(1, len(data) + 1), [np.mean(x) for x in data], marker='D', s=40,
                color='#111111', zorder=4, label='Mean')
     ax.axhline(THRESHOLD_PX, color='gray', ls='--')

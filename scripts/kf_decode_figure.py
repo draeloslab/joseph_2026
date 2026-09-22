@@ -6,8 +6,8 @@ import pandas as pd
 
 import freebie
 from metrics import export_run_metrics
-from utils import (COLORS, DATA, ONLINE_METRICS, boxes, compose, load_master, metric_panel, open_nwb, target_trace,
-                   trial_window, trials_frame)
+from utils import (COLORS, DATA, ONLINE_METRICS, boxes, compose, load_master, metric_panel, open_nwb, split_groups,
+                   target_trace, trial_window, trials_frame)
 
 DECODERS = {'freebie': 'Freebie KF', 'bend': 'KF trained on bend sensor'}
 # (DOF, signal label, freebie_kf.csv conditions, output); 'bend (same window)' is trained on the
@@ -59,14 +59,15 @@ def analyze(cfg):
         ds.close()
 
 
-def load():
+def load(cfg):
+    opts = cfg['online_metrics']
     runs = pd.read_csv(DATA / 'run_metrics.csv')
     closed = runs[runs['mode'] == 'closed_loop']
     return {**{key: (dict(np.load(DATA / f'fig4_example_{key}_trace.npz')),
                      pd.read_csv(DATA / f'fig4_example_{key}_trials.csv')) for key in DECODERS},
             'offline': pd.read_csv(DATA / 'offline_kf.csv'),
-            'groups': [('Freebie KF', closed[closed['freebie']], COLORS['freebie']),
-                       ('KF on bend\nsensor', closed[~closed['freebie']], COLORS['bend'])]}
+            'groups': split_groups(closed, opts['split_feature'], opts['split_dof']),
+            'trials': pd.read_csv(DATA / 'run_trial_metrics.csv') if opts['all_trials'] else None}
 
 
 # ---------------------------------------------------------------- panels
@@ -91,7 +92,7 @@ def panel_offline(ax, d, dof, metric):
 
 
 def panel_metric(ax, d, metric):
-    metric_panel(ax, d['groups'], metric)
+    metric_panel(ax, d['groups'], metric, trials=d['trials'])
 
 
 PANELS = {**{f'{k}_{dof}': partial(panel_decode, key=k, dof=dof) for k in DECODERS for dof in (1, 3)},
@@ -101,5 +102,5 @@ LABELS = {'freebie_1': 'A', 'bend_1': 'B', 'nmse_valid_Index': 'C', 'success_rat
 
 
 def make_figure(cfg):
-    return compose(LAYOUT, PANELS, load(), SIZE, 'fig4_kf_decode', labels=LABELS,
+    return compose(LAYOUT, PANELS, load(cfg), SIZE, 'fig4_kf_decode', labels=LABELS,
                    stats_bars=cfg['stats_bars'][4])

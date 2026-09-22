@@ -8,6 +8,16 @@ run_analysis: false
 # figures/<fig>_stats.csv regardless of this setting -- it only controls the bars on the plot.
 stats_bars: {1: false, 2: false, 3: true, 4: true, rt_bonus: false}
 
+# Online-metrics boxplots (figs 3 & 4): how the Bend/Freebie groups are built.
+#   split_feature: split Freebie into index_angle vs pip_y (see utils.online_feature / FEATURE_CUTOFF)
+#                  instead of one combined Freebie group.
+#   split_dof:     further split every group into 1 DOF / 2 DOF.
+#   all_trials:    for the metrics with a per-trial value (success, time-to-target, orbiting time, path
+#                  efficiency -- ONLINE_TRIAL_COLS), plot every trial (all dots) instead of one
+#                  per-run/session mean. Bit rate and targets/s have no per-trial value and always stay
+#                  per-run means.
+online_metrics: {split_feature: false, split_dof: true, all_trials: false}
+
 # Publication style, shared by every figure (see scripts/utils.py:apply_style).
 style:
   font_family: [Arial, DejaVu Sans]
@@ -52,5 +62,7 @@ examples:
   latency_window_frames: 9000        # frames shown in the per-actor trace
   rt_best_session: 20260917-1557     # lowest mean e2e of the Sept 17 real-time runs with per-actor logs
   hand_control_trace: {session: 20260213-1028, first_trial: null, n_trials: 8}   # null = auto, inside Freebie coverage
-  freebie_decoder_trace: {run: 20260227_Run-007, first_trial: null, n_trials: 8}     # Freebie KF
+  # Freebie KF; 2 DOF, matched to bend_decoder_trace's success rate as closely as the data allows (0.978
+  # vs 0.711 -- the only 2-DOF closed-loop bend run) -- see paper/methods.md for the other 2-DOF candidate.
+  freebie_decoder_trace: {run: 20260223_Run-007, first_trial: null, n_trials: 8}
   bend_decoder_trace: {run: 20251216_Run-003, first_trial: null, n_trials: 8}    # KF trained on bend sensors

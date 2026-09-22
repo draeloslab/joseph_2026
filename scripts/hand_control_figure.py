@@ -6,8 +6,8 @@ import pandas as pd
 
 import freebie
 from metrics import export_run_metrics
-from utils import (COLORS, DATA, ONLINE_METRICS, boxes, compose, load_master, metric_panel, open_nwb, target_trace,
-                   trial_window, trials_frame)
+from utils import (COLORS, DATA, ONLINE_METRICS, boxes, compose, load_master, metric_panel, open_nwb, split_groups,
+                   target_trace, trial_window, trials_frame)
 
 SIGNALS = {1: [('index_angle', 'Freebie index angle'), ('pip_y', 'Freebie PIP y')], 3: [('mrs_x', 'Freebie MRS x')]}
 
@@ -49,14 +49,15 @@ def analyze(cfg):
     ds.close()
 
 
-def load():
+def load(cfg):
+    opts = cfg['online_metrics']
     runs = pd.read_csv(DATA / 'run_metrics.csv')
     hand = runs[runs['mode'] == 'hand_control']
     return {'trace': dict(np.load(DATA / 'fig3_example_trace.npz')),
-            'trials': pd.read_csv(DATA / 'fig3_example_trials.csv'),
+            'ex_trials': pd.read_csv(DATA / 'fig3_example_trials.csv'),
             'corr': pd.read_csv(DATA / 'freebie_bend_corr.csv'),
-            'groups': [('Bend sensor', hand[~hand['freebie']], COLORS['bend']),
-                       ('Freebie', hand[hand['freebie']], COLORS['freebie'])]}
+            'groups': split_groups(hand, opts['split_feature'], opts['split_dof']),
+            'trials': pd.read_csv(DATA / 'run_trial_metrics.csv') if opts['all_trials'] else None}
 
 
 # ---------------------------------------------------------------- panels
@@ -64,7 +65,7 @@ def panel_trace(ax, d, dof):
     tr = d['trace']
     lines = [(tr['t'], tr[f'bend_{dof}'], 'Bend sensor', COLORS['bend'], 2.5)]
     lines += [(tr[f'{key}_t'], tr[key], label, COLORS[key], 2) for key, label in SIGNALS[dof]]
-    target_trace(ax, d['trials'], f'target_{dof}', lines, f"{'Index' if dof == 1 else 'MRS'}\nposition (a.u.)")
+    target_trace(ax, d['ex_trials'], f'target_{dof}', lines, f"{'Index' if dof == 1 else 'MRS'}\nposition (a.u.)")
     if dof == 1:
         ax.set_title(f"Hand control example ({tr['session']})")
 
@@ -79,7 +80,7 @@ def panel_corr(ax, d):
 
 
 def panel_metric(ax, d, metric):
-    metric_panel(ax, d['groups'], metric)
+    metric_panel(ax, d['groups'], metric, trials=d['trials'])
 
 
 PANELS = {'trace_1': partial(panel_trace, dof=1), 'trace_3': partial(panel_trace, dof=3), 'corr': panel_corr,
@@ -88,5 +89,5 @@ LABELS = {'trace_1': 'A', 'corr': 'B', 'success_rate': 'C'}
 
 
 def make_figure(cfg):
-    return compose(LAYOUT, PANELS, load(), SIZE, 'fig3_hand_control', labels=LABELS,
+    return compose(LAYOUT, PANELS, load(cfg), SIZE, 'fig3_hand_control', labels=LABELS,
                    stats_bars=cfg['stats_bars'][3])
