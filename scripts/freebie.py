@@ -20,13 +20,14 @@ def unit_range(x, lo=1, hi=99):
     return (x - p_lo) / (p_hi - p_lo)
 
 
-def xpc_signals(s, t_x):
-    """The session's Freebie signals on xPC time inside the run, 0-1 scaled: {name: (t, v)}."""
+def xpc_signals(s, t_x, pct=(1, 99)):
+    """The session's Freebie signals on xPC time inside the run, 0-1 scaled (pct = the percentiles mapped to 0 and 1):
+    {name: (t, v)}."""
     out = {}
     for name, (t, v) in s['signals'].items():
         tx = t - s['xpc_offset_s']
         ok = np.isfinite(v) & (tx >= t_x[0]) & (tx <= t_x[-1])
-        out[name] = (tx[ok], unit_range(v[ok]))
+        out[name] = (tx[ok], unit_range(v[ok], *pct))
     return out
 
 

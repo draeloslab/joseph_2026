@@ -11,12 +11,11 @@ from utils import (COLORS, DATA, ONLINE_METRICS, boxes, compose, load_master, me
 
 SIGNALS = {1: [('index_angle', 'Freebie index angle'), ('pip_y', 'Freebie PIP y')], 3: [('mrs_x', 'Freebie MRS x')]}
 
-LAYOUT = [['trace_1'] * 4,
-          ['trace_3'] * 4,
-          ['corr', 'success_rate', 'bitrate_bits_per_s', 'targets_per_s'],
-          ['.', 'time_to_target_s', 'orbiting_time_s', 'path_efficiency']]
-SIZE = (20, 14)
-HEIGHT_RATIOS = [0.55, 0.55, 1, 1]   # panel A (the two example traces) was dominating the figure; shrink it
+LAYOUT = [['trace_1'] * 3 + ['corr', 'success_rate', 'bitrate_bits_per_s', 'targets_per_s'],
+          ['trace_3'] * 3 + ['.', 'time_to_target_s', 'orbiting_time_s', 'path_efficiency']]
+SIZE = (26, 8)
+HEIGHT_RATIOS = [1, 1]
+TRACE_PCT = (20, 80)   # example-trace Freebie scaling only (tight so the plateaus land in the target boxes); the KFs keep 1-99
 
 
 # ---------------------------------------------------------------- analysis
@@ -33,7 +32,7 @@ def analyze(cfg):
     ds = open_nwb(cfg, s['run_id'])
     fa = ds.dataset.processing['behavior']['finger_angles']
     t, bend = fa.timestamps[:], fa.data[:]
-    cam = freebie.xpc_signals(s, t)
+    cam = freebie.xpc_signals(s, t, pct=TRACE_PCT)
     trials = trials_frame(ds.dataset, run['dofs'])
     lo, hi = max(c[0][0] for c in cam.values()), min(c[0][-1] for c in cam.values())
     keep = ~trials['blank'] & trials['success'] & (trials['start_time'] >= lo) & (trials['stop_time'] <= hi)
@@ -68,7 +67,7 @@ def panel_trace(ax, d, dof):
     lines += [(tr[f'{key}_t'], tr[key], label, COLORS[key], 2) for key, label in SIGNALS[dof]]
     target_trace(ax, d['ex_trials'], f'target_{dof}', lines, f"{'Index' if dof == 1 else 'MRS'}\nposition (a.u.)")
     if dof == 1:
-        ax.set_title(f"Hand control example ({tr['session']})", pad=34)   # clear the legend row above the axes
+        ax.set_title(f"Hand control example", pad=34)   # clear the legend row above the axes
 
 
 def panel_corr(ax, d):

@@ -13,7 +13,7 @@ import numpy as np
 from PIL import Image
 from scipy.stats import gaussian_kde
 
-from utils import COLORS, DATA, compose, load_master, significance
+from utils import COLORS, DATA, compose, load_master
 
 TOP_KPS = ['DIP', 'PIP', 'MCP', 'WRIST']
 KEYPOINTS = TOP_KPS + ['MRS']
@@ -21,8 +21,8 @@ LIKELIHOOD_MIN = 0.99
 THRESHOLD_PX = 20      # size of the smallest joint
 TOP_OFFSETS = {'DIP': (-25, -50), 'PIP': (-60, -50), 'MCP': (-60, 40), 'WRIST': (25, -50)}
 
-LAYOUT = [['top', 'top', 'side'],
-          ['hist', 'hist', 'box']]
+LAYOUT = [['top', 'side'],
+          ['hist', 'hist']]
 SIZE = (18, 11)
 
 OUT_DIR = DATA / 'keypoint_frames_heldout'
@@ -81,7 +81,7 @@ def panel_frame(ax, d, view):
                     color=c, ha='left' if dx > 0 else 'right', va='center', zorder=7,
                     bbox=dict(boxstyle='round,pad=0.35', fc='black', alpha=0.65, ec=c, lw=0.8),
                     arrowprops=dict(arrowstyle='->', color=c, lw=1.4))
-    ax.set_title('Top view (held-out)' if view == 'top' else 'Side view (held-out)')
+    ax.set_title('Top view' if view == 'top' else 'Side view')
 
 
 def panel_hist(ax, d):
@@ -93,30 +93,12 @@ def panel_hist(ax, d):
     ax.axvline(THRESHOLD_PX, color='gray', ls='--', label=f'Smallest joint ({THRESHOLD_PX} px)')
     ax.set_xlabel('Euclidean distance error (px)')
     ax.set_ylabel('Count')
-    ax.set_title('Tracking error distribution (held-out frames only)')
+    ax.set_title('Tracking error distribution')
     ax.legend()
-
-
-def panel_box(ax, d):
-    data = [d['errors'][kp] for kp in KEYPOINTS]
-    bp = ax.boxplot(data, tick_labels=KEYPOINTS, widths=0.55, patch_artist=True, showfliers=False,
-                    medianprops={'color': '#111111', 'lw': 2})
-    rng = np.random.default_rng(0)
-    for i, (patch, x, c) in enumerate(zip(bp['boxes'], data, COLORS['keypoints'])):
-        patch.set(facecolor=c, alpha=0.6, edgecolor='#444444')
-        ax.scatter(rng.normal(i + 1, 0.06, len(x)), x, s=6, color=c, alpha=0.35, zorder=2, linewidths=0)
-    ax.scatter(np.arange(1, len(data) + 1), [np.mean(x) for x in data], marker='D', s=40,
-               color='#111111', zorder=4, label='Mean')
-    ax.axhline(THRESHOLD_PX, color='gray', ls='--')
-    ax.set_ylim(0, max(THRESHOLD_PX * 1.15, np.percentile(np.concatenate(data), 99.5)))
-    ax.set_ylabel('Euclidean distance error (px)')
-    ax.set_title('Error per keypoint (held-out frames only)')
-    ax.legend()
-    significance(ax, list(zip(KEYPOINTS, data)))
 
 
 PANELS = {'top': partial(panel_frame, view='top'), 'side': partial(panel_frame, view='side'),
-          'hist': panel_hist, 'box': panel_box}
+          'hist': panel_hist}
 
 
 def make_figure(cfg):

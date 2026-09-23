@@ -21,16 +21,12 @@ SIGNAL_COLOR = {'Bend sensor': 'bend', 'Freebie index angle': 'index_angle', 'Fr
 
 OFFLINE_METRICS = {'nmse_valid': 'Normalized MSE\n(MSE / target variance)', 'correlation_valid': 'Correlation (r)'}
 
-LAYOUT = [['freebie_1'] * 6,
-          ['freebie_3'] * 6,
-          ['bend_1'] * 6,
-          ['bend_3'] * 6,
-          ['nmse_valid_Index', 'nmse_valid_MRS', '.', 'success_rate', 'bitrate_bits_per_s', 'targets_per_s'],
-          ['correlation_valid_Index', 'correlation_valid_MRS', '.', 'time_to_target_s', 'orbiting_time_s',
-           'path_efficiency']]
-SIZE = (28, 16)   # keep the original width -- the C/D panels need it, they're already tight at 1/6 of it
-# panels A and B (freebie_*/bend_*) were side by side and huge; stack A above B and shrink both
-HEIGHT_RATIOS = [0.5, 0.5, 0.5, 0.5, 1, 1]
+LAYOUT = [['freebie_1'] * 3 + ['nmse_valid_Index', 'nmse_valid_MRS', 'success_rate', 'bitrate_bits_per_s'],
+          ['freebie_3'] * 3 + ['correlation_valid_Index', 'correlation_valid_MRS', 'targets_per_s', 'time_to_target_s'],
+          ['bend_1'] * 3 + ['.', '.', 'orbiting_time_s', 'path_efficiency'],
+          ['bend_3'] * 3 + ['.'] * 4]
+SIZE = (30, 14)
+HEIGHT_RATIOS = [1, 1, 1, 1]
 
 
 # ---------------------------------------------------------------- analysis
@@ -81,7 +77,7 @@ def panel_decode(ax, d, key, dof):
     target_trace(ax, trials, f'target_{dof}', [(tr['t'], tr[f'decode_{dof}'], 'Decoder output', color, 2.5)],
                  f"{'Index' if dof == 1 else 'MRS'}\nposition (a.u.)")
     if dof == 1:
-        ax.set_title(f"{DECODERS[key]} ({tr['run']})", pad=34)   # clear the legend row above the axes
+        ax.set_title(f"{DECODERS[key]}", pad=34)   # clear the legend row above the axes
 
 
 def panel_offline(ax, d, dof, metric):
