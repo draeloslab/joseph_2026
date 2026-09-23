@@ -12,10 +12,11 @@ import matplotlib
 matplotlib.use('Agg')
 
 import utils
-import validation_figure, latency_figure, hand_control_figure, kf_decode_figure
+import validation_figure, validation_figure_testonly, latency_figure, hand_control_figure, kf_decode_figure
 
 FIGURES = {
     '1': (validation_figure.analyze, validation_figure.make_figure),
+    '1_heldout': (validation_figure_testonly.analyze, validation_figure_testonly.make_figure),
     '2': (latency_figure.analyze, latency_figure.make_figure),
     'rt_bonus': (latency_figure.analyze_rt, latency_figure.make_rt_figure),
     '3': (hand_control_figure.analyze, hand_control_figure.make_figure),
