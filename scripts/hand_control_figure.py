@@ -11,10 +11,15 @@ from utils import (COLORS, DATA, ONLINE_METRICS, boxes, compose, load_master, me
 
 SIGNALS = {1: [('index_angle', 'Freebie index angle'), ('pip_y', 'Freebie PIP y')], 3: [('mrs_x', 'Freebie MRS x')]}
 
-LAYOUT = [['trace_1'] * 3 + ['corr', 'success_rate', 'bitrate_bits_per_s', 'targets_per_s'],
-          ['trace_3'] * 3 + ['.', 'time_to_target_s', 'orbiting_time_s', 'path_efficiency']]
-SIZE = (26, 8)
-HEIGHT_RATIOS = [1, 1]
+# grid in box units: every boxplot panel spans one column per box (3 here), so boxes come out the same width
+m = list(ONLINE_METRICS)
+LAYOUT = [['trace_1'] * 4 + ['corr'] * 3 + ['.'] * 2,
+          ['trace_3'] * 4 + ['corr'] * 3 + ['.'] * 2,
+          [k for k in m[:3] for _ in range(3)],
+          [k for k in m[3:] for _ in range(3)]]
+SIZE = (20, 17)
+HEIGHT_RATIOS = [0.6, 0.6, 1, 1]
+TRACE_T_MAX = 6        # s; panel A only shows the first 6 s of the example trials
 TRACE_PCT = (20, 80)   # example-trace Freebie scaling only (tight so the plateaus land in the target boxes); the KFs keep 1-99
 
 
@@ -66,6 +71,7 @@ def panel_trace(ax, d, dof):
     lines = [(tr['t'], tr[f'bend_{dof}'], 'Bend sensor', COLORS['bend'], 2.5)]
     lines += [(tr[f'{key}_t'], tr[key], label, COLORS[key], 2) for key, label in SIGNALS[dof]]
     target_trace(ax, d['ex_trials'], f'target_{dof}', lines, f"{'Index' if dof == 1 else 'MRS'}\nposition (a.u.)")
+    ax.set_xlim(0, TRACE_T_MAX)
     if dof == 1:
         ax.set_title(f"Hand control example", pad=34)   # clear the legend row above the axes
 

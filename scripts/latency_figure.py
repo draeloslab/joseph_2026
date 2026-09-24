@@ -95,9 +95,11 @@ def panel_stages(ax, d):
     colors = [COLORS[k] for k, _ in ACTORS] + [COLORS['new_rt']]
     boxes(ax, groups, colors, ylabel='Processing time (ms)',
           title=f"Per actor: session means (n={len(d['stages'])})\nvs real-time tuned: per frame")
-    ax.axhline(FRAME_BUDGET_MS, color=COLORS['budget'], ls='--', label='30 FPS budget')
+    ax.axhline(FRAME_BUDGET_MS, color=COLORS['budget'], ls='--')
     ax.set_ylim(0, max(FRAME_BUDGET_MS * 1.15, np.percentile(d['rt']['e2e'], 99.5)))
-    ax.legend(loc='center left')
+    # label the line directly (a legend with one entry floated mid-panel)
+    ax.text(0.99, FRAME_BUDGET_MS, f'30 FPS budget ({FRAME_BUDGET_MS:.1f} ms)', transform=ax.get_yaxis_transform(),
+            ha='right', va='bottom', color=COLORS['budget'], fontweight='bold')
 
 
 def panel_rt_hist(ax, d):
@@ -110,7 +112,7 @@ def panel_rt_actors(ax, d):
 
 def panel_old_vs_new(ax, d):
     data = [d['e2e'], d['rt']['e2e']]
-    bp = ax.boxplot(data, tick_labels=['Previous sessions\n(pooled)', 'Real-time tuned'], widths=0.55,
+    bp = ax.boxplot(data, tick_labels=['Previous\nsessions\n(pooled)', 'Real-time\ntuned'], widths=0.55,
                     patch_artist=True, showfliers=False, medianprops={'color': '#111111', 'lw': 2})
     for patch, c in zip(bp['boxes'], (COLORS['old'], COLORS['new_rt'])):
         patch.set(facecolor=c, alpha=0.5, edgecolor='#444444')
@@ -120,13 +122,14 @@ def panel_old_vs_new(ax, d):
     ax.set_ylim(0, None)
     ax.set_ylabel('End-to-end latency (ms)')
     ax.set_title('Old vs new pipeline')
+    ax.n_boxes = len(data)                        # compose() sets the width: same box width in every figure
     significance(ax, [('Previous sessions', data[0]), ('Real-time tuned', data[1])])
 
 
 # panel_actors (the per-actor example trace, panel B) isn't in PANELS/LAYOUT right now -- see LAYOUT above
-# -- but stays defined and reachable if it comes back; LABELS keeps A/C so it's clear B was skipped on purpose.
+# -- but stays defined and reachable if it comes back (relabel then: it was B, stages was C).
 PANELS = {'hist': panel_hist, 'stages': panel_stages}
-LABELS = {'hist': 'A', 'stages': 'C'}
+LABELS = {'hist': 'A', 'stages': 'B'}
 RT_PANELS = {'hist': panel_rt_hist, 'actors': panel_rt_actors, 'old_vs_new': panel_old_vs_new}
 
 

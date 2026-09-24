@@ -1,12 +1,12 @@
 # Which figures to make, and whether to rebuild data/ from the raw sources first.
-figures: {1: true, 1_heldout: true, 2: true, 3: true, 4: true, rt_bonus: true}
+figures: {1: false, 1_heldout: true, 2: true, 3: true, 4: true, rt_bonus: false}
 run_analysis: false
 
 # Whether each figure draws significance brackets/asterisks on its boxplots (Mann-Whitney U for
 # independent groups, Wilcoxon signed-rank for paired-by-session comparisons, Holm-corrected
 # within each panel). The underlying tests always run and are always written to
 # figures/<fig>_stats.csv regardless of this setting -- it only controls the bars on the plot.
-stats_bars: {1: false, 1_heldout: false, 2: false, 3: true, 4: true, rt_bonus: false}
+stats_bars: {1: false, 1_heldout: false, 2: true, 3: true, 4: true, rt_bonus: false}
 
 # Online-metrics boxplots (figs 3 & 4): how the Bend/Freebie groups are built.
 #   split_feature: split Freebie into index_angle vs pip_y (see utils.online_feature / FEATURE_CUTOFF)

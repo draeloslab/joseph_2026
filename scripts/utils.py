@@ -19,6 +19,7 @@ FRAME_BUDGET_MS = 1000 / 30
 DOF_NAMES = ['thumb', 'index', 'middle', 'ring', 'pinky']
 STATS = []          # every test run while drawing the current figure, written next to it
 SHOW_BARS = True    # whether significance() draws its bracket/asterisks (set per-figure by compose)
+BOX_IN = 1.5        # axes width per box (inches): every boxplot panel is resized to n_boxes * BOX_IN after layout
 
 
 # ---------------------------------------------------------------- config + style
@@ -65,6 +66,14 @@ def compose(layout, panels, data, size, name, labels=None, stats_bars=True, heig
         fn(axd[key], data)
         for row in STATS[n_before:]:
             row['panel'] = key
+    # identical box widths: freeze the constrained layout, then give every boxplot panel (tagged with
+    # ax.n_boxes by boxes() / the panel) a width of n_boxes * BOX_IN, keeping its left edge and height
+    fig.canvas.draw()
+    fig.set_layout_engine('none')
+    for ax in fig.axes:
+        if getattr(ax, 'n_boxes', None):
+            x0, y0, _, h = ax.get_position().bounds
+            ax.set_position([x0, y0, ax.n_boxes * BOX_IN / fig.get_figwidth(), h])
     labels = labels or dict(zip(panels, string.ascii_uppercase))
     for key, letter in labels.items():
         axd[key].text(-0.02, 1.02, letter, transform=axd[key].transAxes, ha='right', va='bottom',
@@ -93,6 +102,7 @@ def boxes(ax, groups, colors, ylabel=None, title=None, test=None, log=False):
     bp = ax.boxplot(data, tick_labels=[f'{l}\n(n={len(d)})' for (l, _), d in zip(groups, data)],
                     widths=0.55, patch_artist=True, showfliers=False,
                     medianprops={'color': '#111111', 'lw': 2})
+    ax.n_boxes = len(groups)
     if len(groups) > 3:      # more than ~3 tick labels crowd/overlap at a normal panel width
         plt.setp(ax.get_xticklabels(), rotation=20, ha='right', rotation_mode='anchor')
     rng = np.random.default_rng(0)

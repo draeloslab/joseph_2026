@@ -21,11 +21,15 @@ SIGNAL_COLOR = {'Bend sensor': 'bend', 'Freebie index angle': 'index_angle', 'Fr
 
 OFFLINE_METRICS = {'nmse_valid': 'Normalized MSE\n(MSE / target variance)', 'correlation_valid': 'Correlation (r)'}
 
-LAYOUT = [['freebie_1'] * 3 + ['nmse_valid_Index', 'nmse_valid_MRS', 'success_rate', 'bitrate_bits_per_s'],
-          ['freebie_3'] * 3 + ['correlation_valid_Index', 'correlation_valid_MRS', 'targets_per_s', 'time_to_target_s'],
-          ['bend_1'] * 3 + ['.', '.', 'orbiting_time_s', 'path_efficiency'],
-          ['bend_3'] * 3 + ['.'] * 4]
-SIZE = (30, 14)
+# grid in box units: every boxplot panel spans one column per box (3, or 2 for the offline MRS panels), so boxes
+# come out the same width; the traces take 3 columns, the size of a 3-box panel. A = Freebie KF, B = bend KF,
+# C = online metrics, D = offline KF.
+m = list(ONLINE_METRICS)
+LAYOUT = [[k for k in ('freebie_1', 'freebie_3', 'bend_1', 'bend_3') for _ in range(3)],
+          [k for k in m[:4] for _ in range(3)],
+          [k for k in m[4:] for _ in range(3)] + ['.'] * 6,
+          [f'{mt}_{dof}' for mt in OFFLINE_METRICS for dof, n in (('Index', 3), ('MRS', 2)) for _ in range(n)] + ['.'] * 2]
+SIZE = (26, 21)
 HEIGHT_RATIOS = [1, 1, 1, 1]
 
 
@@ -76,8 +80,7 @@ def panel_decode(ax, d, key, dof):
     color = COLORS['freebie'] if key == 'freebie' else COLORS['bend']
     target_trace(ax, trials, f'target_{dof}', [(tr['t'], tr[f'decode_{dof}'], 'Decoder output', color, 2.5)],
                  f"{'Index' if dof == 1 else 'MRS'}\nposition (a.u.)")
-    if dof == 1:
-        ax.set_title(f"{DECODERS[key]}", pad=34)   # clear the legend row above the axes
+    ax.set_title(DECODERS[key], pad=34)   # clear the legend row above the axes
 
 
 def panel_offline(ax, d, dof, metric):
@@ -98,7 +101,7 @@ def panel_metric(ax, d, metric):
 PANELS = {**{f'{k}_{dof}': partial(panel_decode, key=k, dof=dof) for k in DECODERS for dof in (1, 3)},
           **{f'{m}_{dof}': partial(panel_offline, dof=dof, metric=m) for m in OFFLINE_METRICS for dof in ('Index', 'MRS')},
           **{m: partial(panel_metric, metric=m) for m in ONLINE_METRICS}}
-LABELS = {'freebie_1': 'A', 'bend_1': 'B', 'nmse_valid_Index': 'C', 'success_rate': 'D'}
+LABELS = {'freebie_1': 'A', 'bend_1': 'B', 'success_rate': 'C', 'nmse_valid_Index': 'D'}
 
 
 def make_figure(cfg):

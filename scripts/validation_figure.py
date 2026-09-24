@@ -101,6 +101,7 @@ def panel_box(ax, d):
     ax.set_ylim(0, max(THRESHOLD_PX * 1.15, np.percentile(np.concatenate(data), 99.5)))
     ax.set_ylabel('Euclidean distance error (px)')
     ax.set_title('Error per keypoint')
+    ax.n_boxes = len(data)                        # compose() sets the width: same box width in every figure
     ax.legend()
     significance(ax, list(zip(KEYPOINTS, data)))
 
