@@ -12,7 +12,7 @@ import matplotlib
 matplotlib.use('Agg')
 
 import utils
-import validation_figure, validation_figure_testonly, latency_figure, hand_control_figure, kf_decode_figure
+import validation_figure, validation_figure_testonly, latency_figure, hand_control_figure, kf_decode_figure, fes_figure
 
 FIGURES = {
     '1': (validation_figure.analyze, validation_figure.make_figure),
@@ -21,10 +21,11 @@ FIGURES = {
     'rt_bonus': (latency_figure.analyze_rt, latency_figure.make_rt_figure),
     '3': (hand_control_figure.analyze, hand_control_figure.make_figure),
     '4': (kf_decode_figure.analyze, kf_decode_figure.make_figure),
+    '5': (fes_figure.analyze, fes_figure.make_figure),
 }
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--figs', nargs='+', help='override config: which figures (1 2 3 4 rt_bonus)')
+parser.add_argument('--figs', nargs='+', help='override config: which figures (1 2 3 4 5 rt_bonus)')
 parser.add_argument('--analysis', action='store_true', help='override config: rerun the analysis from the master file first')
 parser.add_argument('--retrain', action='store_true', help='retrain the cached offline KFs instead of reusing them')
 args = parser.parse_args()
