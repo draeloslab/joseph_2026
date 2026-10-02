@@ -235,15 +235,20 @@ def load_master(cfg):
     return _read_master(str(master_dir(cfg) / 'master.pkl'))
 
 
-def open_nwb(cfg, run_id):
-    """A run's trimmed NWB as neuraldecoding reads it (Dataset of type 'nwb'); close with ds.close()."""
+def open_nwb_path(cfg, path):
+    """Any NWB file as neuraldecoding reads it (Dataset of type 'nwb'); close with ds.close()."""
     from omegaconf import OmegaConf
     sys.path.insert(0, str(Path(cfg['neuraldecoding_path']).expanduser()))
     from neuraldecoding.dataset import Dataset
     ds = Dataset(OmegaConf.create({'dataset_type': 'nwb', 'autoload': False, 'save_path': None,
-                                   'dataset_parameters': {'nwb_file': str(master_dir(cfg) / load_master(cfg)['runs'][run_id]['nwb'])}}))
+                                   'dataset_parameters': {'nwb_file': str(path)}}))
     ds.load_data()
     return ds
+
+
+def open_nwb(cfg, run_id):
+    """A master run's trimmed NWB as neuraldecoding reads it; close with ds.close()."""
+    return open_nwb_path(cfg, master_dir(cfg) / load_master(cfg)['runs'][run_id]['nwb'])
 
 
 def trials_frame(nwb, dofs):

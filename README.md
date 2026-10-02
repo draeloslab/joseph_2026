@@ -14,7 +14,7 @@ scripts/metrics.py         online metrics of a run, from its NWB
 scripts/freebie.py         Freebie signals vs the bend sensors: correlations and the Freebie KFs
 scripts/kf.py              offline Kalman filter (neuraldecoding pipeline)
 notebooks/walkthrough.ipynb   guided tour of the master data, every figure and every analysis step
-scripts/validation_figure.py | latency_figure.py | hand_control_figure.py | kf_decode_figure.py    Figs 1-4
+scripts/validation_figure.py | latency_figure.py | fig3_supplement_figure.py | fig4_supplement_figure.py | human_figure.py
 data/master/               master.pkl + nwb/<run_id>.nwb
 data/master/sessions_master.csv   the master sessions list (one row per session)
 data/cache/freebie_kf.csv  trained offline-KF results, reused until the master changes
@@ -59,3 +59,8 @@ reorder panels by editing `LAYOUT`. Fonts, line widths, the colour palette and w
 significance bars are in `config.yaml`.
 
 `data/master/` is a few hundred MB; host it outside git (LFS, Zenodo, ...) if you publish the repo.
+
+## Figure naming
+Fig 3 and Fig 4 are the War Machine figures, built by `notebooks/war_machine_2026-09-30/build_fig3.py` / `build_fig4.py`.
+The earlier 3 and 4 are now `fig3_supplement_figure.py` / `fig4_supplement_figure.py` (config keys `3_supplement`, `4_supplement`).
+Fig 6 (`human_figure.py`, keys `6` and `6_latency`) is the 3D human hand tracking figure; its data paths are under `human:` in `config.yaml`.

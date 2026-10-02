@@ -1,4 +1,4 @@
-"""Figure 4: Kalman filter decoding from EMG, trained on Freebie signals vs bend sensors."""
+"""Figure 4 supplement: Kalman filter decoding from EMG, trained on Freebie signals vs bend sensors."""
 from functools import partial
 
 import matplotlib.pyplot as plt
@@ -59,10 +59,10 @@ def analyze(cfg):
         feature = int(np.median(trials['DecodeFeature']))             # decoder output columns 0-4 TCFR, 5-9 SBP
         trials = trial_window(trials, ex['first_trial'], ex['n_trials'], ~trials['blank'] & trials['decoded'])
         win = (t >= trials['start_time'].iloc[0]) & (t <= trials['stop_time'].iloc[-1])
-        np.savez(DATA / f'fig4_example_{key}_trace.npz', t=t[win], run=ex['run'],
+        np.savez(DATA / f'fig4_supplement_example_{key}_trace.npz', t=t[win], run=ex['run'],
                  **{f'decode_{d}': data[win, d + 5 * feature] for d in dofs})
         trials[['start_time', 'stop_time', 'target_radius', 'success',
-                *[f'target_{d}' for d in dofs]]].to_csv(DATA / f'fig4_example_{key}_trials.csv', index=False)
+                *[f'target_{d}' for d in dofs]]].to_csv(DATA / f'fig4_supplement_example_{key}_trials.csv', index=False)
         ds.close()
 
 
@@ -70,8 +70,8 @@ def load(cfg):
     opts = cfg['online_metrics']
     runs = pd.read_csv(DATA / 'run_metrics.csv')
     closed = runs[runs['mode'] == 'closed_loop']
-    return {**{key: (dict(np.load(DATA / f'fig4_example_{key}_trace.npz')),
-                     pd.read_csv(DATA / f'fig4_example_{key}_trials.csv')) for key in DECODERS},
+    return {**{key: (dict(np.load(DATA / f'fig4_supplement_example_{key}_trace.npz')),
+                     pd.read_csv(DATA / f'fig4_supplement_example_{key}_trials.csv')) for key in DECODERS},
             'offline': pd.read_csv(DATA / 'offline_kf.csv'),
             'groups': split_groups(closed, opts['split_feature'], opts['split_dof']),
             'trials': pd.read_csv(DATA / 'run_trial_metrics.csv') if opts['all_trials'] else None}
@@ -126,6 +126,6 @@ LABELS = {'freebie': 'A', 'bend': 'B', 'success_rate': 'C', 'nmse_valid_Index': 
 
 
 def make_figure(cfg):
-    return compose(LAYOUT, PANELS, load(cfg), SIZE, 'fig4_kf_decode', labels=LABELS,
-                   stats_bars=cfg['stats_bars'][4], height_ratios=HEIGHT_RATIOS,
+    return compose(LAYOUT, PANELS, load(cfg), SIZE, 'fig4_supplement_kf_decode', labels=LABELS,
+                   stats_bars=cfg['stats_bars']['4_supplement'], height_ratios=HEIGHT_RATIOS,
                    width_ratios=WIDTH_RATIOS)

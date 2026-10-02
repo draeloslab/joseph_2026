@@ -1,4 +1,4 @@
-"""Figure 3: Freebie tracking vs bend sensors during hand control."""
+"""Figure 3 supplement: Freebie tracking vs bend sensors during hand control."""
 from functools import partial
 
 import numpy as np
@@ -48,9 +48,9 @@ def analyze(cfg):
     for name, (tc, v) in cam.items():
         w = (tc >= t0) & (tc <= t1)
         out[f'{name}_t'], out[name] = tc[w], v[w]
-    np.savez(DATA / 'fig3_example_trace.npz', **out)
+    np.savez(DATA / 'fig3_supplement_example_trace.npz', **out)
     trials[['start_time', 'stop_time', 'target_radius', 'success',
-            *[f'target_{d}' for d in run['dofs']]]].to_csv(DATA / 'fig3_example_trials.csv', index=False)
+            *[f'target_{d}' for d in run['dofs']]]].to_csv(DATA / 'fig3_supplement_example_trials.csv', index=False)
     ds.close()
 
 
@@ -58,8 +58,8 @@ def load(cfg):
     opts = cfg['online_metrics']
     runs = pd.read_csv(DATA / 'run_metrics.csv')
     hand = runs[runs['mode'] == 'hand_control']
-    return {'trace': dict(np.load(DATA / 'fig3_example_trace.npz')),
-            'ex_trials': pd.read_csv(DATA / 'fig3_example_trials.csv'),
+    return {'trace': dict(np.load(DATA / 'fig3_supplement_example_trace.npz')),
+            'ex_trials': pd.read_csv(DATA / 'fig3_supplement_example_trials.csv'),
             'corr': pd.read_csv(DATA / 'freebie_bend_corr.csv'),
             'groups': split_groups(hand, opts['split_feature'], opts['split_dof']),
             'trials': pd.read_csv(DATA / 'run_trial_metrics.csv') if opts['all_trials'] else None}
@@ -95,5 +95,5 @@ LABELS = {'trace_1': 'A', 'corr': 'B', 'success_rate': 'C'}
 
 
 def make_figure(cfg):
-    return compose(LAYOUT, PANELS, load(cfg), SIZE, 'fig3_hand_control', labels=LABELS,
-                   stats_bars=cfg['stats_bars'][3], height_ratios=HEIGHT_RATIOS)
+    return compose(LAYOUT, PANELS, load(cfg), SIZE, 'fig3_supplement_hand_control', labels=LABELS,
+                   stats_bars=cfg['stats_bars']['3_supplement'], height_ratios=HEIGHT_RATIOS)
