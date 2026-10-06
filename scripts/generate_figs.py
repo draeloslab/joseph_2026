@@ -2,8 +2,9 @@
 Make the paper figures.
 
     python scripts/generate_figs.py                 # figures enabled in config.yaml, from data/
-    python scripts/generate_figs.py --figs 2 rt_bonus
-    python scripts/generate_figs.py --analysis      # rerun the analysis from data/master.pkl first
+    python scripts/generate_figs.py --figs 2 2_supplement
+    python scripts/generate_figs.py --analysis      # rerun the analysis from the master folder first
+    python scripts/war_machine.py                   # (re)build the War Machine master from the server first (figs 2-4)
     python scripts/generate_figs.py --analysis --retrain   # ... and retrain the offline KFs (else cached)
 """
 import argparse
@@ -13,21 +14,23 @@ matplotlib.use('Agg')
 
 import utils
 import validation_figure, validation_figure_testonly, latency_figure, fig3_supplement_figure, fig4_supplement_figure, fes_figure, human_figure
+import war_machine_figures as wmf
 
 FIGURES = {
     '1': (validation_figure.analyze, validation_figure.make_figure),
     '1_heldout': (validation_figure_testonly.analyze, validation_figure_testonly.make_figure),
-    '2': (latency_figure.analyze, latency_figure.make_figure),
-    'rt_bonus': (latency_figure.analyze_rt, latency_figure.make_rt_figure),
+    '2': (wmf.analyze_fig2, wmf.make_fig2),                                    # War Machine (config war_machine)
+    '2_supplement': (latency_figure.analyze, latency_figure.make_figure),     # pooled earlier sessions + War Machine
+    '3': (wmf.analyze_fig3, wmf.make_fig3),
     '3_supplement': (fig3_supplement_figure.analyze, fig3_supplement_figure.make_figure),
+    '4': (wmf.analyze_fig4, wmf.make_fig4),
     '4_supplement': (fig4_supplement_figure.analyze, fig4_supplement_figure.make_figure),
     '5': (fes_figure.analyze, fes_figure.make_figure),
-    '6': (human_figure.analyze, human_figure.make_figure),                      # analyze also collects the latencies
-    '6_latency': (lambda cfg: None, human_figure.make_latency_figure),
+    '6': (human_figure.analyze, human_figure.make_figure),
 }
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--figs', nargs='+', help='override config: which figures (1 2 3_supplement 4_supplement 5 6 6_latency rt_bonus); figs 3 and 4 are the War Machine notebooks')
+parser.add_argument('--figs', nargs='+', help='override config: which figures (1 1_heldout 2 2_supplement 3 3_supplement 4 4_supplement 5 6); 2-4 are War Machine')
 parser.add_argument('--analysis', action='store_true', help='override config: rerun the analysis from the master file first')
 parser.add_argument('--retrain', action='store_true', help='retrain the cached offline KFs instead of reusing them')
 parser.add_argument('--dofs', nargs='+', type=int, help='fig 6: which DOF tasks to draw, e.g. --dofs 1 2 (default: config human.plot_dofs)')

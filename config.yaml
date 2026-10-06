@@ -1,12 +1,17 @@
 # Which figures to make, and whether to rebuild data/ from the raw sources first.
-figures: {1: false, 1_heldout: true, 2: true, 3_supplement: true, 4_supplement: true, rt_bonus: false}
+# 2, 3 and 4 are War Machine (scripts/war_machine_figures.py); 2_supplement is the earlier pooled-session latency
+# figure next to the War Machine runs, 3_supplement / 4_supplement the earlier Joker figures. Figs 2 and 2_supplement
+# also write a dropped-frames figure (figures/fig2*_dropped_frames) + data/**/dropped_frames csvs.
+# Moved out to notebooks/: the War Machine sensor check (war_machine_sensors/), the human latency figure and the
+# vision diagnostics (human_vision/).
+figures: {1: false, 1_heldout: true, 2: true, 2_supplement: true, 3: true, 3_supplement: true, 4: true, 4_supplement: true, 5: true}
 run_analysis: false
 
 # Whether each figure draws significance brackets/asterisks on its boxplots (Mann-Whitney U for
 # independent groups, Wilcoxon signed-rank for paired-by-session comparisons, Holm-corrected
 # within each panel). The underlying tests always run and are always written to
 # figures/<fig>_stats.csv regardless of this setting -- it only controls the bars on the plot.
-stats_bars: {1: false, 1_heldout: false, 2: true, 3: true, 3_supplement: true, 4: true, 4_supplement: true, 5: false, 6: true, rt_bonus: false}
+stats_bars: {1: false, 1_heldout: false, 2: true, 2_supplement: true, 3: true, 3_supplement: true, 4: true, 4_supplement: true, 5: false, 6: true}
 
 # Online-metrics boxplots (figs 3 & 4): how the Bend/Freebie groups are built.
 #   split_feature: split Freebie into index_angle vs pip_y (see utils.online_feature / FEATURE_CUTOFF)
@@ -50,6 +55,10 @@ style:
     old: '#757272'
     new_rt: '#1baf7a'
     keypoints: ['#FF4444', '#FF9900', '#33CC33', '#3399FF', '#B455E0']   # DIP PIP MCP WRIST MRS
+    fingers: {thumb: '#e0475f', index: '#f2a93b', middle: '#6db38a', ring: '#1f8ea3', pinky: '#a77bca', palm: '#9e9e9e'}   # fig 5 skeleton
+    fes_x: '#22404f'
+    fes_y: '#e5734f'
+    stim_window: '#f3dfa2'
 
 # ---- analysis input: the master folder every figure is rebuilt from (master.pkl + nwb/<run>.nwb) ----
 master: data/master
@@ -59,17 +68,45 @@ neuraldecoding_path: ~/Code/neuraldecoding      # clone of the lab's neuraldecod
 human:
   day_dir: "/run/user/1000/gvfs/smb-share:server=cnpl-drmanhattan.engin.umich.edu,share=share/Data/Humans/Jake/2026-09-30"
   runs: {Run-002: 1, Run-003: 2, Run-015: 3, Run-016: 4}   # run -> DOF task (Run-001 ignored)
-  diag_run: Run-002                # run used by scripts/vision_diagnostics.py (the clean 1 DOF run)
+  diag_run: Run-002                # run used by notebooks/human_vision/vision_diagnostics.py (the clean 1 DOF run)
   plot_dofs: [1, 2, 3, 4]          # which DOF tasks to draw; [1, 2] drops the short 3/4-DOF runs (or: generate_figs.py --dofs 1 2)
   prediction_dir: ~/predictions/20260930/20260930-1834   # vision pipeline folder covering the day; cut into each run's time window
-  rdb_python: ~/miniforge3/envs/improvPytorch/bin/python   # env with redis + msgpack, for scripts/human_rdb_latency.py
+  rdb_python: ~/miniforge3/envs/improvPytorch/bin/python   # env with redis + msgpack, for scripts/human_rdb_latency.py (fig 6's RDB target sets)
+
+# ---- figs 2-4 (War Machine, BRAND rig): <master>/war_machine.pkl, built by `python scripts/war_machine.py` ----
+war_machine:
+  server: "/run/user/1000/gvfs/smb-share:server=cnpl-drmanhattan.engin.umich.edu,share=share/Data/Monkeys/War Machine"
+  predictions: ~/predictions                            # improv vision logs, ~/predictions/<YYYYMMDD>/<session>/ (figs 2, 2_supplement dropped frames)
+  rdb_python: ~/miniforge3/envs/improvPytorch/bin/python   # env with redis + msgpack, for scripts/war_machine_rdb.py
+  # Every run on the rhodes_1d_universal graph on these days (other graphs, earlier days, were debugging). Left out:
+  #   2026-09-30 Run-000: closed loop with an LSTM / KF6 decoder whose training run is not recorded (no bend/Freebie label)
+  #   2026-10-05 Run-003, Run-004: closed loop, not in the analysis yet
+  # Decoder trials inside 09-30 Run-001, 007, 008 (decoder-setting tests per the notes) are out of their runs' mode.
+  runs:
+    '2026-09-30': [Run-001, Run-002, Run-003, Run-004, Run-005, Run-006, Run-007, Run-008, Run-009, Run-010, Run-011, Run-012, Run-013, Run-014]
+    '2026-10-02': [Run-001, Run-002, Run-003, Run-004, Run-005, Run-006, Run-007, Run-008]
+    '2026-10-05': [Run-001, Run-002]
+  # hand-control run each decoder was trained on (session notes); the decoder's bend / Freebie label is that run's mode
+  kf_training_runs:
+    '2026-10-02': {decodeParamsKalmanFilter0.pkl: Run-001, decodeParamsKalmanFilter1.pkl: Run-002,
+                 decodeParamsKalmanFilter2.pkl: Run-005, decodeParamsKalmanFilter3.pkl: Run-006}
+  decoder_channels: [16, 18, 20, 22, 24, 26, 28, 30]    # brand-monkeyrig decoder_configs/kf_rhodes.yaml index_selector_emg
+  all_trials: true          # figs 3/4 online metrics: box + dots of every trial (true) or of one mean per run (false).
+                            # Stats are on the run means either way (no pseudo-replication); ticks show n runs, n trials.
+  fig2_merge_fps: false     # fig 2: pool every run (30 + 60 fps) into one histogram with only the 60 fps budget line
+                            # (saved as fig2_war_machine_merged)
+  exclude_closed_loop: []   # fig 4 online metrics without these runs, e.g. [2026-10-02_Run-003, 2026-10-02_Run-004]
+                            # (KF0 / KF1, trained before the 10-02 "FIXED RANGES" fix)
+  offline_kf_min_trials: 0  # fig 4D: skip hand-control runs with fewer in-mode trials (e.g. 30 drops 09-30 Run-001, 002, 007, 008, 014)
+  hand_control_trace: {run: 2026-10-02_Run-005, first_trial: null, n_trials: 6}   # bend drove, Freebie alongside
+  freebie_decoder_trace: {run: 2026-10-02_Run-008, first_trial: null, n_trials: 8}   # KF3, trained on Freebie (Run-006)
+  bend_decoder_trace: {run: 2026-10-02_Run-007, first_trial: null, n_trials: 8}      # KF2, trained on bend (Run-005)
 
 # Example sessions used by single-session panels.
 examples:
   latency_session: 20260227-1020
   latency_skip_first_frames: 1     # drop GPU warm-up frames before pooling
   latency_window_frames: 9000        # frames shown in the per-actor trace
-  rt_best_session: 20260917-1557     # lowest mean e2e of the Sept 17 real-time runs with per-actor logs
   hand_control_trace: {session: 20260213-1028, first_trial: null, n_trials: 8}   # null = auto, inside Freebie coverage
   # Freebie KF; 2 DOF, matched to bend_decoder_trace's success rate as closely as the data allows (0.978
   # vs 0.711 -- the only 2-DOF closed-loop bend run) -- see paper/methods.md for the other 2-DOF candidate.

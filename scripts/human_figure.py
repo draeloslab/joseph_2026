@@ -1,14 +1,12 @@
 """
 Figure 6: 3D human hand tracking, 1-4 DOF tasks. Online metrics (same six panels as fig 3) with one box per
-DOF count, plus a latency figure (per-actor boxes like fig 2B) from every latency we can find for the runs:
-the prediction folder of each NWB run, the NWB itself, and the run's Redis dump (.rdb) if there is one.
+DOF count. The latency figure and the vision diagnostics of these runs are notebooks/human_vision/.
 
 Runs, DOF labels and paths are under `human:` in config.yaml. `plot_dofs` (or generate_figs.py --dofs 1 2) picks
 which DOF tasks are drawn; analyze() always processes every run, so switching needs no rerun.
 """
 import json
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -22,11 +20,10 @@ from functools import partial
 from pynwb import NWBFile, NWBHDF5IO, TimeSeries
 
 from metrics import run_metrics
-from utils import COLORS, DATA, ONLINE_METRICS, ROOT, boxes, compose, metric_panel
+from utils import COLORS, DATA, ONLINE_METRICS, ROOT, compose, metric_panel
 
 DOF_COLORS = {1: '#2a78d6', 2: '#1baf7a', 3: '#eb6834', 4: '#b455e0'}
 TITLE = '3D Human Hand Tracking'
-LATENCY_SOURCES = {'prediction': '#2a78d6', 'nwb': '#1baf7a', 'rdb': '#eb6834'}
 
 m = list(ONLINE_METRICS)
 
@@ -83,7 +80,7 @@ def read_trials(cfg, run, nwb):
     """
     The NWB trials table, with target_names / targets replaced by the RDB's trial_info where the two disagree: the
     NWB export of Run-015 (3 DOF) kept only the index target of trials that had index + middle + rp targets. Trials
-    are matched on start time (same clock); needs data/human_rdb_trials_<run>.json from analyze_latency.
+    are matched on start time (same clock); needs data/human_rdb_trials_<run>.json from save_rdb_trials.
     """
     tr = nwb.trials.to_dataframe()
     f = DATA / f'human_rdb_trials_{run}.json'
@@ -146,7 +143,7 @@ def export_example(cfg, run, n_dof, src):
 # ---------------------------------------------------------------- online metrics
 def analyze(cfg):
     """Every run in config human.runs (plot_dofs is applied only when drawing, so changing it needs no rerun)."""
-    analyze_latency(cfg)        # first: it also saves each run's full RDB target sets that read_trials() uses
+    save_rdb_trials(cfg)        # first: each run's full RDB target sets, which read_trials() uses
     rows, trial_rows = [], []
     tmp = Path(tempfile.mkdtemp())
     for run, n_dof, nwb_path, _ in run_files(cfg):
@@ -225,125 +222,29 @@ def make_figure(cfg):
                    height_ratios=[0.12, 1.3, 1, 1])
 
 
-# ---------------------------------------------------------------- latency collection
-def _ms(name, v):
-    """Latency values in ms: `_s`/`sec` names, or anything whose median is < 1 (a fraction of a second), are seconds."""
-    v = np.asarray(v, float).ravel()
-    v = v[np.isfinite(v)]
-    if len(v) and (re.search(r'(_s|_sec|seconds?)$', name) or np.median(v) < 1):
-        v = v * 1000
-    return v
-
-
-def _is_latency(name):
-    return 'latenc' in name.lower()
-
-
-# vision pipeline latency files in a prediction folder: label -> (file, timestamp file). Values are seconds; the
-# timestamp file (unix s, same length) is what lets one session-long folder be cut into the human runs' windows.
-VISION = {
-    'Camera top (capture)': ('TISlatencies_top', 'TISstarts_top'),
-    'Camera front-right (capture)': ('TISlatencies_front_right', 'TISstarts_front_right'),
-    'Vision: store get': ('batch3d_lat_store_get', 'batch3d_timestamps'),
-    'Vision: inference': ('batch3d_lat_inference', 'batch3d_timestamps'),
-    'Vision: triangulate': ('batch3d_lat_triangulate', 'batch3d_timestamps'),
-    'Vision: angles': ('batch3d_lat_angles', 'batch3d_timestamps'),
-    'Vision: queue put': ('batch3d_lat_queue_put', 'batch3d_timestamps'),
-    'Vision: total': ('batch3d_lat_total', 'batch3d_timestamps'),
-    'Sender step': ('sender_step_latencies', 'sender_timestamps'),
-    'Vision end-to-end': ('sender_joint_e2e', 'sender_timestamps'),
-}
-
-
-def run_window(nwb_path):
-    """(start, stop) of a run in unix seconds: NWB session start + the span of its continuous stream."""
-    with NWBHDF5IO(str(nwb_path), 'r') as io:
-        nwb = io.read()
-        t = nwb.acquisition['continuous'].timestamps
-        return nwb.session_start_time.timestamp(), nwb.session_start_time.timestamp() + (t[-1] - t[0])
-
-
-def from_prediction_dir(folder, window):
-    """Vision latencies (ms) of the prediction folder's frames that fall inside the run's unix-time window."""
-    out = {}
-    for label, (lat_f, ts_f) in VISION.items():
-        try:
-            lat, ts = np.load(Path(folder) / f'{lat_f}.npy'), np.load(Path(folder) / f'{ts_f}.npy')
-        except FileNotFoundError as e:
-            print(f'  missing {e.filename}')
-            continue
-        if len(lat) != len(ts):
-            print(f'  {label}: {len(lat)} latencies vs {len(ts)} timestamps, skipped')
-            continue
-        inside = (ts >= window[0]) & (ts <= window[1])
-        out[label] = lat[inside & np.isfinite(lat)] * 1000
-    return out
-
-
-def from_nwb(path):
-    """What the human NWB has: start -> cue delay of every trial (ms). It has no latency-named series."""
-    with NWBHDF5IO(str(path), 'r') as io:
-        tr = io.read().trials.to_dataframe()
-    return {'trial start -> cue': (tr['cue_time'] - tr['start_time']).to_numpy() * 1000}
-
-
-def from_rdb(cfg, rdb):
-    """Latencies derived from the node timestamps in the run's Redis dump (see human_rdb_latency.py)."""
+# ---------------------------------------------------------------- the RDB's full target sets
+def rdb_latency_csv(cfg, rdb):
+    """Run human_rdb_latency.py on one run's Redis dump: saves data/human_rdb_trials_<run>.json (the full target sets
+    read_trials() needs) and returns the path of its per-actor latency csv (used by notebooks/human_vision/)."""
     out = Path(tempfile.mkdtemp()) / 'lat.csv'
     for attempt in range(4):        # the redis-server / import occasionally dies at startup; a retry has always worked
         try:
-            return _rdb_once(cfg, rdb, out)
+            subprocess.run([str(Path(cfg['human']['rdb_python']).expanduser()), str(ROOT / 'scripts' / 'human_rdb_latency.py'),
+                            str(rdb), str(out)], check=True,
+                           env={k: v for k, v in os.environ.items() if not k.startswith('PYTHON') and k != 'LD_LIBRARY_PATH'})   # keep this env's libs out of the other one
+            break
         except subprocess.CalledProcessError:
             if attempt == 3:
                 raise
             print('  rdb extraction failed, retrying')
-
-
-def _rdb_once(cfg, rdb, out):
-    subprocess.run([str(Path(cfg['human']['rdb_python']).expanduser()), str(ROOT / 'scripts' / 'human_rdb_latency.py'),
-                    str(rdb), str(out)], check=True,
-                   env={k: v for k, v in os.environ.items() if not k.startswith('PYTHON') and k != 'LD_LIBRARY_PATH'})   # keep this env's libs out of the other one
-    df = pd.read_csv(out)
     shutil.copy(str(out) + '.trials.json', DATA / f'human_rdb_trials_{Path(rdb).stem}.json')
-    return {a: g['latency_ms'].to_numpy() for a, g in df.groupby('actor')}
+    return out
 
 
-def analyze_latency(cfg):
-    rows = []
-    for run, n_dof, nwb_path, rdb_path in run_files(cfg):
-        found = {'nwb': from_nwb(nwb_path)}
-        pred = cfg['human']['prediction_dir']
-        if pred:
-            found['prediction'] = from_prediction_dir(_path(pred), run_window(nwb_path))
+def save_rdb_trials(cfg):
+    for run, _, _, rdb_path in run_files(cfg):
         if rdb_path.exists():
             try:
-                found['rdb'] = from_rdb(cfg, rdb_path)
+                rdb_latency_csv(cfg, rdb_path)
             except Exception as e:
                 print(f'could not read {rdb_path}: {e}')
-        for source, series in found.items():
-            for label, v in series.items():
-                rows.append(pd.DataFrame({'run_id': run, 'n_dof': n_dof, 'source': source, 'actor': label, 'latency_ms': v}))
-                print(f'  {run} [{source}] {label}: {len(v)} values, median {np.median(v):.1f} ms')
-    pd.concat(rows, ignore_index=True).to_csv(DATA / 'human_latencies.csv', index=False)
-
-
-def make_latency_figure(cfg):
-    """One box per latency series (pooled over runs, every value a dot), coloured by where it came from."""
-    lat = pd.read_csv(DATA / 'human_latencies.csv')
-    lat = lat[lat['n_dof'].isin(plot_dofs(cfg))]
-    keys = lat.groupby(['source', 'actor']).size().index.tolist()
-    rng = np.random.default_rng(0)      # long series (10^4-10^5 frames): draw a random 3000 of each, keeps the SVG small
-    groups = [(a, (lambda v: rng.choice(v, min(len(v), 3000), replace=False))(lat[(lat['source'] == s) & (lat['actor'] == a)]['latency_ms'].to_numpy()))
-              for s, a in keys]
-
-    def panel(ax, _):
-        boxes(ax, groups, [LATENCY_SOURCES[s] for s, _ in keys], ylabel='Latency (ms)',
-              title=f'{TITLE}: latency per actor\n({lat["run_id"].nunique()} runs: {", ".join(f"{n} DOF" for n in plot_dofs(cfg))})')
-        ax.axhline(1000 / 30, color=COLORS['budget'], ls='--')
-        ax.text(0.99, 1000 / 30, '30 FPS budget', transform=ax.get_yaxis_transform(), ha='right', va='bottom',
-                color=COLORS['budget'], fontweight='bold')
-        handles = [ax.scatter([], [], color=c, label=s) for s, c in LATENCY_SOURCES.items() if s in {k[0] for k in keys}]
-        ax.legend(handles=handles, title='Source')
-
-    return compose([['lat']], {'lat': panel}, None, (max(7, 1.5 * len(groups) + 3.5), 6.5), 'fig6_human_latency',
-                   labels={}, stats_bars=False)

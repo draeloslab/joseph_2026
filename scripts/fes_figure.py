@@ -1,6 +1,7 @@
 """Figure 5: Freebie driving FES (real-time tracking session + stimulation session)."""
 from functools import partial
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 from utils import COLORS, DATA, DOF_NAMES, compose
@@ -14,7 +15,7 @@ CROP_ASPECT = {'rt': 1.0, 'stim': 1.48}   # width / height of the cropped frames
 
 LAYOUT = [['rt_0', 'rt_1', 'stim_0', 'stim_1'],
           ['rt_trace', 'rt_trace', 'stim_trace', 'stim_trace']]
-SIZE = (22, 10)
+SIZE = (16, 9)      # same scale as the other figures (16-18 in wide), so the shared fonts / line widths read the same
 WIDTH_RATIOS = [1, 1, 1.4, 1.4]
 HEIGHT_RATIOS = [1, 0.8]
 
@@ -32,10 +33,10 @@ def load():
 def draw_skeleton(ax, xy):
     for f, a, b in BONES:
         if np.isfinite(xy[[a, b]]).all():
-            ax.plot(*xy[[a, b]].T, color=COLORS['fingers'][f], solid_capstyle='round', zorder=2)
+            ax.plot(*xy[[a, b]].T, color=COLORS['fingers'][f], lw=3, solid_capstyle='round', zorder=2)
     for f, idx in FINGERS.items():
         m = np.isfinite(xy[idx, 0])
-        ax.scatter(*xy[idx][m].T, color=COLORS['fingers'][f], edgecolors='white', linewidths=0.8, zorder=3)
+        ax.scatter(*xy[idx][m].T, s=55, color=COLORS['fingers'][f], edgecolors='white', linewidths=1.2, zorder=3)
 
 
 def panel_image(ax, d, kind, i):
@@ -56,23 +57,23 @@ def panel_image(ax, d, kind, i):
 
 def panel_rt_trace(ax, d):
     for k, name in enumerate(('x', 'y')):
-        ax.plot(d['rt_t'], d['rt_indextip'][:, k], color=COLORS[f'fes_{name}'], lw=1.2, marker='.', ms=3, label=name)
+        ax.plot(d['rt_t'], d['rt_indextip'][:, k], color=COLORS[f'fes_{name}'], lw=2, marker='.', ms=5, label=name)
     ax.invert_yaxis()
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Index fingertip (px)')
-    ax.set_title('Real-time tracking (camera 3)')
-    ax.legend(loc='upper left', bbox_to_anchor=(1.0, 1.0))
+    ax.set_title('Real-time tracking (camera 3)', pad=34)
+    ax.legend(loc='lower left', bbox_to_anchor=(0, 1.0), ncol=2, borderaxespad=0.1, handlelength=1.5, markerscale=2)
 
 
 def panel_stim_trace(ax, d):
     for (a, b), label in zip(d['stim_windows'], d['stim_labels']):
-        ax.axvspan(a, b, color=COLORS['stim_window'], alpha=0.3, lw=0)
+        ax.axvspan(a, b, color=COLORS['stim_window'], alpha=0.6, lw=0)
         ax.text((a + b) / 2, 1.01, label, transform=ax.get_xaxis_transform(), ha='center', va='bottom',
-                fontsize='small')
+                fontsize=plt.rcParams['xtick.labelsize'], fontweight='bold')
     ax.plot(d['stim_t'], d['stim_x'] - np.nanmedian(d['stim_x']), color=COLORS['fes_x'])
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Middle knuckle x (mm)')
-    ax.set_title('Stimulation conditions 9-14', pad=45)
+    ax.set_title('Stimulation conditions 9-14', pad=48)
 
 
 PANELS = {'rt_0': partial(panel_image, kind='rt', i=0), 'rt_1': partial(panel_image, kind='rt', i=1),

@@ -74,14 +74,14 @@ def compose(layout, panels, data, size, name, labels=None, stats_bars=True, heig
         if getattr(ax, 'n_boxes', None):
             x0, y0, _, h = ax.get_position().bounds
             ax.set_position([x0, y0, ax.n_boxes * BOX_IN / fig.get_figwidth(), h])
-    labels = labels or dict(zip(panels, string.ascii_uppercase))
+    labels = dict(zip(panels, string.ascii_uppercase)) if labels is None else labels   # {} = no panel letters
     for key, letter in labels.items():
         axd[key].text(-0.02, 1.02, letter, transform=axd[key].transAxes, ha='right', va='bottom',
                       fontsize=COLORS['_panel_label_size'], fontweight='bold')
     FIGS.mkdir(exist_ok=True)
     for ext in ('svg', 'png'):
         fig.savefig(FIGS / f'{name}.{ext}', bbox_inches='tight')
-    print(f'saved figures/{name}.svg/.png')
+    print(f'saved {(FIGS / name).relative_to(ROOT)}.svg/.png')
     if STATS:
         stats = pd.DataFrame(STATS)
         stats[['panel', *stats.columns.drop('panel')]].to_csv(FIGS / f'{name}_stats.csv', index=False)
@@ -89,17 +89,19 @@ def compose(layout, panels, data, size, name, labels=None, stats_bars=True, heig
 
 
 # ---------------------------------------------------------------- shared panels
-def boxes(ax, groups, colors, ylabel=None, title=None, test=None, log=False):
+def boxes(ax, groups, colors, ylabel=None, title=None, test=None, log=False, test_groups=None, n_labels=None):
     """
-    groups: list of (label, values). Box + jittered points, n in the tick label.
+    groups: list of (label, values). Box + jittered points, n in the tick label (or n_labels: one string per group).
     test: None, 'independent' (Mann-Whitney U) or 'paired' (Wilcoxon; values are Series indexed by session).
+    test_groups: the (label, values) to test instead of the plotted ones (e.g. run means while every trial is drawn).
     log: log-scale y-axis, for ratio metrics (e.g. normalized MSE) that can span orders of
     magnitude when a validation target has near-zero variance; only strictly positive values
     are plottable on it, so non-positive values are dropped the same way non-finite ones are.
     """
     data = [np.asarray(v, dtype=float) for _, v in groups]
     data = [d[np.isfinite(d) & (d > 0 if log else True)] for d in data]
-    bp = ax.boxplot(data, tick_labels=[f'{l}\n(n={len(d)})' for (l, _), d in zip(groups, data)],
+    n_labels = n_labels or [f'(n={len(d)})' for d in data]
+    bp = ax.boxplot(data, tick_labels=[f'{l}\n{n}' for (l, _), n in zip(groups, n_labels)],
                     widths=0.55, patch_artist=True, showfliers=False,
                     medianprops={'color': '#111111', 'lw': 2})
     ax.n_boxes = len(groups)
@@ -108,14 +110,16 @@ def boxes(ax, groups, colors, ylabel=None, title=None, test=None, log=False):
     rng = np.random.default_rng(0)
     for i, (patch, d, c) in enumerate(zip(bp['boxes'], data, colors)):
         patch.set(facecolor=c, alpha=0.3, edgecolor='#444444')
-        ax.scatter(rng.normal(i + 1, 0.06, len(d)), d, s=6, color=c, alpha=0.35, zorder=3, linewidths=0)
+        few = len(d) <= 50          # one point per run/session: draw them big enough to see
+        ax.scatter(rng.normal(i + 1, 0.06, len(d)), d, s=30 if few else 6, color=c, alpha=0.8 if few else 0.35, zorder=3,
+                   linewidths=0.5 if few else 0, edgecolors='white')
     if log:
         ax.set_yscale('log')
     ax.grid(axis='y', color='#ececec')
     ax.set_ylabel(ylabel)
     ax.set_title(title)
     if test:
-        significance(ax, groups, paired=test == 'paired')
+        significance(ax, test_groups or groups, paired=test == 'paired', shown=groups)
 
 
 # ---------------------------------------------------------------- statistics
@@ -133,12 +137,13 @@ def stars(p):
     return '***' if p < 0.001 else '**' if p < 0.01 else '*' if p < 0.05 else ''
 
 
-def significance(ax, groups, paired=False):
+def significance(ax, groups, paired=False, shown=None):
     """
     Two-sided test on every pair of groups (Wilcoxon signed-rank on matching sessions when
     paired, else Mann-Whitney U), Holm-corrected within the panel. Every result is recorded
     in STATS; significant pairs get a bar with asterisks above the boxes, unless the
     figure's `stats_bars` config is off (see compose()), in which case only STATS is written.
+    shown: the plotted (label, values) when they differ from the tested ones; the bars go above those.
     """
     rows = []
     for i in range(len(groups)):
@@ -179,7 +184,7 @@ def significance(ax, groups, paired=False):
     lo, hi = ax.get_ylim()
     lo_s, hi_s = to_space(lo), to_space(hi)
     tops = []
-    for _, v in groups:
+    for _, v in shown or groups:
         v = np.asarray(v, float)
         v = v[np.isfinite(v) & (v > 0)] if is_log else v[np.isfinite(v)]
         if len(v):
@@ -307,16 +312,26 @@ def split_groups(runs, split_feature=False, split_dof=False):
     return [(f'{label} {n}DOF', g[g['n_dof'] == n], c) for label, g, c in groups for n in (1, 2)]
 
 
-def metric_panel(ax, groups, metric, trials=None):
+def metric_panel(ax, groups, metric, trials=None, stats_trials=None, show_trials=True):
     """
     groups: list of (label, runs df, color), each df a subset of run_metrics.csv (see split_groups).
     One box per group. `trials`: run_trial_metrics.csv, to plot every trial's value (all dots) instead
     of one session/run-average point per run, for the metrics that have a per-trial column
     (ONLINE_TRIAL_COLS); groups without a per-trial column always use per-run means.
+    stats_trials: the same trial table, to instead test on one mean per run (no pseudo-replication) and label
+    each box with its n runs and n trials; the box shows every trial (show_trials) or the run means.
     """
     col = ONLINE_TRIAL_COLS.get(metric)
+    runs = [(label, g[metric]) for label, g, _ in groups]
+    colors = [c for *_, c in groups]
+    if stats_trials is not None:
+        per = [stats_trials[stats_trials['run_id'].isin(g['run_id'])][col] for _, g, _ in groups]
+        n_labels = [f'{np.isfinite(g[metric]).sum()} runs\n{np.isfinite(t).sum()} trials' for (_, g, _), t in zip(groups, per)]
+        shown = [(label, t) for (label, *_), t in zip(groups, per)] if show_trials else runs
+        boxes(ax, shown, colors, ylabel=ONLINE_METRICS[metric], test='independent', test_groups=runs, n_labels=n_labels)
+        return
     if trials is not None and col is not None:
         data = [(label, trials[trials['run_id'].isin(g['run_id'])][col]) for label, g, _ in groups]
     else:
-        data = [(label, g[metric]) for label, g, _ in groups]
-    boxes(ax, data, [c for *_, c in groups], ylabel=ONLINE_METRICS[metric], test='independent')
+        data = runs
+    boxes(ax, data, colors, ylabel=ONLINE_METRICS[metric], test='independent')
