@@ -74,7 +74,7 @@ def load(cfg):
                      pd.read_csv(DATA / f'fig4_supplement_example_{key}_trials.csv')) for key in DECODERS},
             'offline': pd.read_csv(DATA / 'offline_kf.csv'),
             'groups': split_groups(closed, opts['split_feature'], opts['split_dof']),
-            'trials': pd.read_csv(DATA / 'run_trial_metrics.csv') if opts['all_trials'] else None}
+            'trials': pd.read_csv(DATA / 'run_trial_metrics.csv'), 'show_trials': opts['all_trials']}
 
 
 # ---------------------------------------------------------------- panels
@@ -112,11 +112,12 @@ def panel_offline(ax, d, dof, metric):
     # sessions push it into the hundreds, so it needs a log axis to stay readable
     boxes(ax, [(s.replace('Freebie ', 'Freebie\n'), by_signal[s]) for s in signals],
           [COLORS[SIGNAL_COLOR[s]] for s in signals], ylabel=OFFLINE_METRICS[metric],
-          title=f'Offline KF, {dof} DOF', test='paired', log=metric == 'nmse_valid')
+          title=f'Offline KF, {dof} DOF', test='paired', log=metric == 'nmse_valid', unit='session')
 
 
 def panel_metric(ax, d, metric):
-    metric_panel(ax, d['groups'], metric, trials=d['trials'])
+    # box + dots: every trial (config online_metrics.all_trials) or the run means; tested on run means either way
+    metric_panel(ax, d['groups'], metric, stats_trials=d['trials'], show_trials=d['show_trials'])
 
 
 PANELS = {**{k: partial(panel_decode, key=k) for k in DECODERS},

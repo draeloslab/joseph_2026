@@ -26,6 +26,8 @@ data/master/sessions_master.csv   the master sessions list (one row per session)
 data/cache/freebie_kf.csv  trained offline-KF results, reused until the master changes
 data/*.csv, *.npz          derived numbers each figure is drawn from (War Machine: data/war_machine/)
 figures/                   output (svg + png) and <fig>_stats.csv with every significance test
+figures/all_stats.csv      every figure's descriptives (n sessions / runs / trials, mean, sd, median, ...) + every test
+                           (rebuilt at the end of each generate_figs.py run from the <fig>_descriptives / _stats csvs)
 ```
 
 ## Make the figures

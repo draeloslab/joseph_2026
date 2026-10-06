@@ -62,7 +62,7 @@ def load(cfg):
             'ex_trials': pd.read_csv(DATA / 'fig3_supplement_example_trials.csv'),
             'corr': pd.read_csv(DATA / 'freebie_bend_corr.csv'),
             'groups': split_groups(hand, opts['split_feature'], opts['split_dof']),
-            'trials': pd.read_csv(DATA / 'run_trial_metrics.csv') if opts['all_trials'] else None}
+            'trials': pd.read_csv(DATA / 'run_trial_metrics.csv'), 'show_trials': opts['all_trials']}
 
 
 # ---------------------------------------------------------------- panels
@@ -81,12 +81,13 @@ def panel_corr(ax, d):
     boxes(ax, [('Index angle\nvs index', c['corr_index_angle']), ('PIP y\nvs index', c['corr_pip_y']),
                ('MRS x\nvs MRS', c['corr_mrs_x'])],
           [COLORS['index_angle'], COLORS['pip_y'], COLORS['mrs_x']],
-          ylabel='|Pearson r| (per session)', title='Freebie vs bend sensor', test='paired')
+          ylabel='|Pearson r| (per session)', title='Freebie vs bend sensor', test='paired', unit='session')
     ax.set_ylim(bottom=0)
 
 
 def panel_metric(ax, d, metric):
-    metric_panel(ax, d['groups'], metric, trials=d['trials'])
+    # box + dots: every trial (config online_metrics.all_trials) or the run means; tested on run means either way
+    metric_panel(ax, d['groups'], metric, stats_trials=d['trials'], show_trials=d['show_trials'])
 
 
 PANELS = {'trace_1': partial(panel_trace, dof=1), 'trace_3': partial(panel_trace, dof=3), 'corr': panel_corr,

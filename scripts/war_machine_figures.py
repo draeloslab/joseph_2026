@@ -181,13 +181,16 @@ def make_fig2(cfg):
                     label=f'{label}, {len(e):,} frames), median {np.median(e):.1f} ms')
             ax.axvline(budget, color=FPS_COLOR[f] if not merge else COLORS['budget'], ls='--', lw=2,
                        label=f'{f} FPS budget ({budget:.1f} ms): {np.mean(e > budget):.1%} over')
+            utils.describe(ax, label.split(' (')[0], e, unit='frame', n_runs=len(ids),
+                           n_sessions=ids.str[:10].nunique(), pct_over_budget=100 * np.mean(e > budget),
+                           budget_ms=budget)
         ax.set_xlim(12, 36)
         ax.set_xlabel('End-to-end latency (ms)'); ax.set_ylabel('Frames'); ax.set_title('End-to-end latency distribution')
         ax.legend(loc='upper right')
 
     def stages(ax, d):
         utils.boxes(ax, [(label, runs[k]) for k, label in STAGE_LABELS], [COLORS[k] for k, _ in STAGE_LABELS],
-                    ylabel='Processing time (ms)', title=f'Per stage: run means (n={len(runs)})')
+                    ylabel='Processing time (ms)', title=f'Per stage: run means (n={len(runs)})', unit='run')
         for f in fps:
             ax.axhline(1000 / f, color=COLORS['budget'], ls='--' if f == 30 or merge else ':')
             ax.text(0.99, 1000 / f, f'{f} FPS budget ({1000 / f:.1f} ms)', transform=ax.get_yaxis_transform(),
@@ -243,7 +246,7 @@ def make_fig3(cfg):
 
     def corrp(ax, d):
         utils.boxes(ax, [('Freebie vs\nbend sensor', corr['r'].abs())], [COLORS['freebie']], ylabel='|Pearson r| (per run)',
-                    n_labels=[f'{len(corr)} runs'])
+                    n_labels=[f'{len(corr)} runs'], unit='run')
         ax.set_ylim(0, 1.05)
 
     panels = {'trace': trace, 'corr': corrp, **_metric_panels(cfg, runs, trials, ['bend', 'freebie'])}
@@ -380,7 +383,7 @@ def make_fig4(cfg):
         by = {s: g.set_index('run_id')[metric] for s, g in off.groupby('signal')}
         utils.boxes(ax, [(LABEL[s], by[s]) for s in ('bend', 'freebie')], [COLORS['bend'], COLORS['freebie']],
                     ylabel=ylab[metric], title='Offline KF, index', test='paired', log=metric == 'nmse_valid',
-                    n_labels=[f'{len(by[s])} runs' for s in ('bend', 'freebie')])
+                    n_labels=[f'{len(by[s])} runs' for s in ('bend', 'freebie')], unit='run')
 
     panels = {'freebie': partial(decode, key='freebie'), 'bend': partial(decode, key='bend'),
               **_metric_panels(cfg, runs, trials, ['kf_bend', 'kf_freebie']),

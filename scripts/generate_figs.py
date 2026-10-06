@@ -49,3 +49,4 @@ for key in figs:
     if run_analysis:
         analyze(cfg)
     make_figure(cfg)
+utils.write_all_stats()       # figures/all_stats.csv: every figure's descriptives + tests, from the csvs on disk

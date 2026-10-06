@@ -7,7 +7,7 @@ import pandas as pd
 
 import frame_drops
 import war_machine_figures as wmf
-from utils import COLORS, DATA, FRAME_BUDGET_MS, boxes, compose, load_master
+from utils import COLORS, DATA, FRAME_BUDGET_MS, boxes, compose, describe, load_master
 
 ACTORS = [('frame_acq', 'Frame acquisition'), ('inference', 'Inference'),
           ('sender', 'Sender'), ('e2e', 'End-to-end')]
@@ -104,6 +104,10 @@ def panel_hist(ax, d):
     ax.hist(d['wm_e2e'], bins=bins, color=WM_COLOR, alpha=0.6,
             label=f"War Machine runs (n={len(d['wm_runs'])}, {len(d['wm_e2e']):,} frames)")
     ax.axvline(FRAME_BUDGET_MS, color=COLORS['budget'], ls='--', label=f'30 FPS budget ({FRAME_BUDGET_MS:.1f} ms)')
+    describe(ax, 'Earlier sessions', d['e2e'], unit='frame', n_sessions=d['n_sessions'],
+             pct_over_budget=100 * np.mean(d['e2e'] > FRAME_BUDGET_MS), budget_ms=FRAME_BUDGET_MS)
+    describe(ax, 'War Machine runs', d['wm_e2e'], unit='frame', n_runs=len(d['wm_runs']),
+             n_sessions=d['wm_runs']['run_id'].str[:10].nunique(), pct_over_budget_30fps=100 * np.mean(d['wm_e2e'] > FRAME_BUDGET_MS))
     ax.axvline(np.median(d['e2e']), color='#111111', ls=':', label=f"Median (earlier sessions) {np.median(d['e2e']):.1f} ms")
     ax.axvline(np.median(d['wm_e2e']), color=WM_COLOR, ls=':', label=f"Median (War Machine) {np.median(d['wm_e2e']):.1f} ms")
     ax.set_xlabel('End-to-end latency (ms)')
@@ -120,8 +124,11 @@ def panel_stages(ax, d):
     # per actor: mean over the earlier sessions (one point each); War Machine: end-to-end mean of each run
     groups = [(label, d['stages'][key]) for key, label in ACTORS] + [('War Machine\nend-to-end', d['wm_runs']['e2e'])]
     colors = [COLORS[k] for k, _ in ACTORS] + [WM_COLOR]
-    boxes(ax, groups, colors, ylabel='Processing time (ms)',
+    boxes(ax, groups, colors, ylabel='Processing time (ms)', describe_groups=False,
           title=f"Per actor: session means (n={len(d['stages'])})\nvs War Machine: run means (n={len(d['wm_runs'])})")
+    for (label, v), unit in zip(groups, ['session'] * len(ACTORS) + ['run']):
+        frames = d['stages']['n_frames'].sum() if unit == 'session' else d['wm_runs']['frames'].sum()
+        describe(ax, label, v, unit=unit, n_frames=frames)
     ax.axhline(FRAME_BUDGET_MS, color=COLORS['budget'], ls='--')
     ax.set_ylim(0, FRAME_BUDGET_MS * 1.15)
     # label the line directly (a legend with one entry floated mid-panel)

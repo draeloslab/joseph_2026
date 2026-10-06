@@ -17,7 +17,7 @@ stats_bars: {1: false, 1_heldout: false, 2: true, 2_supplement: true, 3: true, 3
 #   split_feature: split Freebie into index_angle vs pip_y (see utils.online_feature / FEATURE_CUTOFF)
 #                  instead of one combined Freebie group.
 #   split_dof:     further split every group into 1 DOF / 2 DOF.
-#   all_trials:    plot every trial (all dots) instead of one per-run/session mean, for every online
+#   all_trials:    box + dots of every trial instead of one per-run mean (stats are on run means either way), for every online
 #                  metric (ONLINE_TRIAL_COLS in utils.py) -- bit rate and the time-to-target/orbiting/path
 #                  metrics are real per-trial values; success rate and targets/s are a running cumulative
 #                  rate instead, since neither has a real per-trial value (see metrics.run_metrics).

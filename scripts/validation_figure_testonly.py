@@ -13,7 +13,7 @@ import numpy as np
 from PIL import Image
 from scipy.stats import gaussian_kde
 
-from utils import COLORS, DATA, compose, load_master, significance
+from utils import COLORS, DATA, compose, load_master, significance, describe
 
 TOP_KPS = ['DIP', 'PIP', 'MCP', 'WRIST']
 KEYPOINTS = TOP_KPS + ['MRS']
@@ -116,7 +116,9 @@ def panel_box(ax, d):
     ax.set_title('Error per keypoint (held-out)')
     ax.n_boxes = len(data)                        # compose() sets the width: same box width as figs 3/4
     ax.legend(loc='upper right')
-    significance(ax, list(zip(KEYPOINTS, data)))
+    for kp, x in zip(KEYPOINTS, data):
+        describe(ax, kp, x, unit='frame')
+    significance(ax, list(zip(KEYPOINTS, data)), tested_on='frames')
 
 
 PANELS = {'top': partial(panel_frame, view='top'), 'side': partial(panel_frame, view='side'),

@@ -18,6 +18,7 @@ COLORS = {}
 FRAME_BUDGET_MS = 1000 / 30
 DOF_NAMES = ['thumb', 'index', 'middle', 'ring', 'pinky']
 STATS = []          # every test run while drawing the current figure, written next to it
+DESCR = []          # descriptives (n, mean, sd, ...) of every group drawn in the current figure, written next to it
 SHOW_BARS = True    # whether significance() draws its bracket/asterisks (set per-figure by compose)
 BOX_IN = 1.5        # axes width per box (inches): every boxplot panel is resized to n_boxes * BOX_IN after layout
 
@@ -61,10 +62,11 @@ def compose(layout, panels, data, size, name, labels=None, stats_bars=True, heig
     fig = plt.figure(figsize=size, layout='constrained')
     axd = fig.subplot_mosaic(layout, height_ratios=height_ratios, width_ratios=width_ratios)
     STATS.clear()
+    DESCR.clear()
     for key, fn in panels.items():
-        n_before = len(STATS)
+        n_before, d_before = len(STATS), len(DESCR)
         fn(axd[key], data)
-        for row in STATS[n_before:]:
+        for row in STATS[n_before:] + DESCR[d_before:]:
             row['panel'] = key
     # identical box widths: freeze the constrained layout, then give every boxplot panel (tagged with
     # ax.n_boxes by boxes() / the panel) a width of n_boxes * BOX_IN, keeping its left edge and height
@@ -82,18 +84,75 @@ def compose(layout, panels, data, size, name, labels=None, stats_bars=True, heig
     for ext in ('svg', 'png'):
         fig.savefig(FIGS / f'{name}.{ext}', bbox_inches='tight')
     print(f'saved {(FIGS / name).relative_to(ROOT)}.svg/.png')
-    if STATS:
-        stats = pd.DataFrame(STATS)
-        stats[['panel', *stats.columns.drop('panel')]].to_csv(FIGS / f'{name}_stats.csv', index=False)
+    for rows, suffix in ((STATS, 'stats'), (DESCR, 'descriptives')):
+        out = FIGS / f'{name}_{suffix}.csv'
+        if rows:
+            df = pd.DataFrame(rows)
+            df[['panel', *df.columns.drop('panel')]].to_csv(out, index=False)
+        else:
+            out.unlink(missing_ok=True)      # nothing tested / described this time: drop a stale file
     return fig
 
 
+def _summary(values):
+    v = np.asarray(values, dtype=float)
+    v = v[np.isfinite(v)]
+    if not len(v):
+        return {'n': 0}
+    return {'n': len(v), 'mean': v.mean(), 'sd': v.std(ddof=1) if len(v) > 1 else np.nan, 'sem': v.std(ddof=1) / np.sqrt(len(v)) if len(v) > 1 else np.nan,
+            'median': np.median(v), 'q1': np.percentile(v, 25), 'q3': np.percentile(v, 75), 'min': v.min(), 'max': v.max()}
+
+
+def describe(ax, label, values, unit=None, **extra):
+    """Record one group's descriptives for the figure's <name>_descriptives.csv (and figures/all_stats.csv).
+    unit: what one value is (trial, run, session, frame). extra: e.g. n_sessions / n_trials / run-level summaries."""
+    DESCR.append({'measure': (ax.get_ylabel() or ax.get_xlabel() or ax.get_title()).replace('\n', ' '),
+                  'group': str(label).replace('\n', ' '), 'unit': unit, **_summary(values), **extra})
+
+
+# the paper's figures, in order, for figures/all_stats.csv (name -> config key)
+ALL_STATS_FIGS = {'fig1_validation': '1', 'fig1_validation_heldout': '1_heldout', 'fig2_war_machine': '2',
+                  'fig2_war_machine_merged': '2 (merged fps)', 'fig2_war_machine_dropped_frames': '2 (dropped frames)',
+                  'fig2_supplement_latency': '2_supplement', 'fig2_supplement_dropped_frames': '2_supplement (dropped frames)',
+                  'fig3_war_machine': '3', 'fig3_supplement_hand_control': '3_supplement', 'fig4_war_machine': '4',
+                  'fig4_supplement_kf_decode': '4_supplement', 'fig6_human': '6'}
+
+
+def write_all_stats():
+    """figures/all_stats.csv: every figure's descriptives (row_type 'group') and significance tests (row_type 'test')
+    from the <name>_descriptives.csv / <name>_stats.csv files on disk, so figures drawn in earlier runs are included."""
+    parts = []
+    for name, key in ALL_STATS_FIGS.items():
+        for suffix, kind in (('descriptives', 'group'), ('stats', 'test')):
+            f = FIGS / f'{name}_{suffix}.csv'
+            if f.exists():
+                df = pd.read_csv(f)
+                if kind == 'test':
+                    df = df.rename(columns={'ylabel': 'measure'})
+                    df['significant'] = df['p_holm'] < 0.05
+                parts.append(df.assign(figure=key, figure_file=name, row_type=kind))
+    if not parts:
+        return
+    out = pd.concat(parts, ignore_index=True)
+    lvl = lambda sfx: [f'{k}_{sfx}' for k in ('mean', 'sd', 'sem', 'median', 'q1', 'q3', 'min', 'max')]
+    first = ['figure', 'figure_file', 'panel', 'row_type', 'measure', 'group', 'unit', 'n', 'n_sessions', 'n_runs', 'n_trials',
+             'n_frames', 'mean', 'sd', 'sem', 'median', 'q1', 'q3', 'min', 'max', *lvl('run'), *lvl('trial'), 'trial_value',
+             'group_a', 'group_b', 'test', 'tested_on', 'n_a', 'n_b', 'mean_a', 'mean_b', 'median_a', 'median_b',
+             'statistic', 'p', 'p_holm', 'significant']
+    cols = [c for c in first if c in out] + [c for c in out if c not in first]
+    out[cols].to_csv(FIGS / 'all_stats.csv', index=False)
+    print(f'saved figures/all_stats.csv ({len(out)} rows)')
+
+
 # ---------------------------------------------------------------- shared panels
-def boxes(ax, groups, colors, ylabel=None, title=None, test=None, log=False, test_groups=None, n_labels=None):
+def boxes(ax, groups, colors, ylabel=None, title=None, test=None, log=False, test_groups=None, n_labels=None,
+          unit=None, describe_groups=True):
     """
     groups: list of (label, values). Box + jittered points, n in the tick label (or n_labels: one string per group).
     test: None, 'independent' (Mann-Whitney U) or 'paired' (Wilcoxon; values are Series indexed by session).
     test_groups: the (label, values) to test instead of the plotted ones (e.g. run means while every trial is drawn).
+    unit: what one value is (trial, run, session, frame), for the descriptives csv; describe_groups=False when the
+    caller records richer descriptives itself (metric_panel).
     log: log-scale y-axis, for ratio metrics (e.g. normalized MSE) that can span orders of
     magnitude when a validation target has near-zero variance; only strictly positive values
     are plottable on it, so non-positive values are dropped the same way non-finite ones are.
@@ -118,8 +177,12 @@ def boxes(ax, groups, colors, ylabel=None, title=None, test=None, log=False, tes
     ax.grid(axis='y', color='#ececec')
     ax.set_ylabel(ylabel)
     ax.set_title(title)
+    if describe_groups:
+        for (label, _), d in zip(groups, data):
+            describe(ax, label, d, unit)
     if test:
-        significance(ax, test_groups or groups, paired=test == 'paired', shown=groups)
+        significance(ax, test_groups or groups, paired=test == 'paired', shown=groups,
+                     tested_on=getattr(ax, 'tested_on', unit))
 
 
 # ---------------------------------------------------------------- statistics
@@ -137,13 +200,14 @@ def stars(p):
     return '***' if p < 0.001 else '**' if p < 0.01 else '*' if p < 0.05 else ''
 
 
-def significance(ax, groups, paired=False, shown=None):
+def significance(ax, groups, paired=False, shown=None, tested_on=None):
     """
     Two-sided test on every pair of groups (Wilcoxon signed-rank on matching sessions when
     paired, else Mann-Whitney U), Holm-corrected within the panel. Every result is recorded
     in STATS; significant pairs get a bar with asterisks above the boxes, unless the
     figure's `stats_bars` config is off (see compose()), in which case only STATS is written.
     shown: the plotted (label, values) when they differ from the tested ones; the bars go above those.
+    tested_on: what one tested value is (run means, trials, ...), recorded in the stats csv.
     """
     rows = []
     for i in range(len(groups)):
@@ -163,13 +227,14 @@ def significance(ax, groups, paired=False, shown=None):
             res = wilcoxon(a, b) if paired else mannwhitneyu(a, b)
             rows.append({'i': i, 'j': j, 'group_a': la.replace('\n', ' '), 'group_b': lb.replace('\n', ' '),
                          'test': 'Wilcoxon signed-rank' if paired else 'Mann-Whitney U',
-                         'n_a': len(a), 'n_b': len(b), 'median_a': np.median(a), 'median_b': np.median(b),
+                         'n_a': len(a), 'n_b': len(b), 'mean_a': np.mean(a), 'mean_b': np.mean(b),
+                         'median_a': np.median(a), 'median_b': np.median(b),
                          'statistic': res.statistic, 'p': res.pvalue})
     if not rows:
         return
     for row, p_adj in zip(rows, holm([r['p'] for r in rows])):
         row['p_holm'] = p_adj
-        STATS.append({'ylabel': (ax.get_ylabel() or ax.get_title()).replace('\n', ' '),
+        STATS.append({'ylabel': (ax.get_ylabel() or ax.get_title()).replace('\n', ' '), 'tested_on': tested_on,
                       **{k: v for k, v in row.items() if k not in ('i', 'j')}})
 
     if not SHOW_BARS:
@@ -312,6 +377,14 @@ def split_groups(runs, split_feature=False, split_dof=False):
     return [(f'{label} {n}DOF', g[g['n_dof'] == n], c) for label, g, c in groups for n in (1, 2)]
 
 
+def _n_sessions(g):
+    """Recording sessions behind a group of runs: the master's session ids, or the day of a War Machine run id."""
+    if 'sessions' in g:
+        return len({x for v in g['sessions'] for x in str(v).split(',')})
+    ids = g['run_id'].astype(str)
+    return ids.str[:10].nunique() if len(ids) and ids.str.match(r'\d{4}-\d{2}-\d{2}_').all() else np.nan
+
+
 def metric_panel(ax, groups, metric, trials=None, stats_trials=None, show_trials=True):
     """
     groups: list of (label, runs df, color), each df a subset of run_metrics.csv (see split_groups).
@@ -320,18 +393,33 @@ def metric_panel(ax, groups, metric, trials=None, stats_trials=None, show_trials
     (ONLINE_TRIAL_COLS); groups without a per-trial column always use per-run means.
     stats_trials: the same trial table, to instead test on one mean per run (no pseudo-replication) and label
     each box with its n runs and n trials; the box shows every trial (show_trials) or the run means.
+    Every group's n sessions / runs / trials and its run-level and trial-level summaries go to the descriptives csv.
     """
     col = ONLINE_TRIAL_COLS.get(metric)
     runs = [(label, g[metric]) for label, g, _ in groups]
     colors = [c for *_, c in groups]
+    table = stats_trials if stats_trials is not None else trials
+    per = [table[table['run_id'].isin(g['run_id'])][col] if table is not None and col is not None else pd.Series(dtype=float)
+           for _, g, _ in groups]
     if stats_trials is not None:
-        per = [stats_trials[stats_trials['run_id'].isin(g['run_id'])][col] for _, g, _ in groups]
         n_labels = [f'{np.isfinite(g[metric]).sum()} runs\n{np.isfinite(t).sum()} trials' for (_, g, _), t in zip(groups, per)]
         shown = [(label, t) for (label, *_), t in zip(groups, per)] if show_trials else runs
-        boxes(ax, shown, colors, ylabel=ONLINE_METRICS[metric], test='independent', test_groups=runs, n_labels=n_labels)
-        return
-    if trials is not None and col is not None:
-        data = [(label, trials[trials['run_id'].isin(g['run_id'])][col]) for label, g, _ in groups]
+        ax.tested_on = 'run means'
+        boxes(ax, shown, colors, ylabel=ONLINE_METRICS[metric], test='independent', test_groups=runs, n_labels=n_labels,
+              describe_groups=False)
+        plotted = 'trial' if show_trials else 'run'
+    elif trials is not None and col is not None:
+        ax.tested_on = 'trials'
+        boxes(ax, [(label, t) for (label, *_), t in zip(groups, per)], colors, ylabel=ONLINE_METRICS[metric],
+              test='independent', describe_groups=False)
+        plotted = 'trial'
     else:
-        data = runs
-    boxes(ax, data, colors, ylabel=ONLINE_METRICS[metric], test='independent')
+        ax.tested_on = 'run means'
+        boxes(ax, runs, colors, ylabel=ONLINE_METRICS[metric], test='independent', describe_groups=False)
+        plotted = 'run'
+    for (label, g, _), t in zip(groups, per):
+        r, tr = _summary(g[metric]), _summary(t)
+        describe(ax, label, t if plotted == 'trial' else g[metric], unit=plotted, n_sessions=_n_sessions(g),
+                 trial_value='running rate up to the trial' if col and col.endswith('_running') else 'per trial',
+                 n_runs=r.get('n', 0), n_trials=tr.get('n', 0),
+                 **{f'{k}_run': v for k, v in r.items() if k != 'n'}, **{f'{k}_trial': v for k, v in tr.items() if k != 'n'})

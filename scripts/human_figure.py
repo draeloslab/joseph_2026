@@ -170,12 +170,13 @@ def load(cfg):
     by_dof = {n: r for r, n in cfg['human']['runs'].items()}
     ex = {n: (dict(np.load(DATA / f'human_example_{by_dof[n]}_trace.npz')), pd.read_csv(DATA / f'human_example_{by_dof[n]}_trials.csv'))
           for n in keep}
+    runs['sessions'] = Path(cfg['human']['day_dir']).name       # one session (day) for every run, for n_sessions
     return {'runs': runs[runs['n_dof'].isin(keep)], 'trials': trials[trials['n_dof'].isin(keep)], 'dofs': keep, 'examples': ex}
 
 
 def panel_metric(ax, d, metric):
     groups = [(f'{n} DOF', d['runs'][d['runs']['n_dof'] == n], c) for n, c in DOF_COLORS.items() if n in d['dofs']]
-    metric_panel(ax, groups, metric, trials=d['trials'])
+    metric_panel(ax, groups, metric, stats_trials=d['trials'])     # every trial shown, tested on run means
 
 
 STEP = 1.45    # vertical spacing between stacked DOFs in a trace panel

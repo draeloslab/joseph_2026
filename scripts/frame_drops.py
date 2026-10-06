@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from utils import compose
+from utils import compose, describe
 
 KIND_COLOR = {'pipeline': '#d62728', 'camera': '#2a78d6'}
 OFFLINE_S = 1.0
@@ -121,5 +121,13 @@ def make_figure(runs, events, id_col, name, title):
         handles.append(plt.Rectangle((0, 0), 1, 1, facecolor='none', edgecolor='#888888', hatch='///', label='pipeline offline'))
         ax.legend(handles=handles, loc='lower right', bbox_to_anchor=(1.0, 1.0), ncol=3, borderaxespad=0.3)
         ax.grid(axis='x', color='#ececec')
+        for kind in ('pipeline', 'camera'):
+            describe(ax, f'{kind} drops (% of frames, per run)', runs[f'{kind}_pct'], unit='run', n_runs=len(runs),
+                     n_frames=runs[f'{kind}_frames'].sum(), n_dropped=runs[f'{kind}_dropped'].sum(),
+                     n_events=runs[f'{kind}_events'].sum(),
+                     pct_all_frames=100 * runs[f'{kind}_dropped'].sum() / max(runs[f'{kind}_frames'].sum(), 1))
+        if 'offline_s' in runs:
+            describe(ax, 'pipeline offline (s, per run)', runs['offline_s'], unit='run', n_runs=len(runs),
+                     runs_with_offline=int((runs['offline_s'] > 0).sum()), total_offline_s=runs['offline_s'].sum())
 
     return compose([['drops']], {'drops': panel}, None, (16, 2.5 + 0.42 * len(ids)), name, labels={}, stats_bars=False)
