@@ -235,7 +235,7 @@ ALL_STATS_FIGS = {'fig2_validation_heldout': '2', 'fig3_latency_war_machine': '3
                   'fig4_hand_control': '4',
                   'fig5_kalman_filter': '5', 'figS1_latency_old_pipeline': 'S1',
                   'figS2_hand_control_old_system': 'S2',
-                  'figS3_human_2dof_hand_control': 'S3', 'figS4_kalman_filter_old_system': 'S4',
+                  'figS3_human_hand_control': 'S3', 'figS4_kalman_filter_old_system': 'S4',
                   'validation_all_frames': 'validation (all frames)', 'human_hand_control_0930': 'human 09-30'}
 
 

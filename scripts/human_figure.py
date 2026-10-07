@@ -1,5 +1,8 @@
 """
-Figure 6: 3D human hand tracking on the BRAND triangulation set-up (2026-10-06, config human_bare, analysis in
+Figure S3 (make_figure, config human_dof, analysis human_tuning.analyze_dof): 2-4 DOF hand control on the BRAND triangulation
+set-up: stage latency by DOF count, bit rate, the task screen. make_figure_1006 is the 2026-10-06 tuning figure.
+
+The 10-06 notes: 3D human hand tracking on the BRAND triangulation set-up (2026-10-06, config human_bare, analysis in
 human_tuning.py): pipeline-stage latency, bit rate per run, a 2-DOF hand-control example. make_figure_0930 (key
 6_0930) is the earlier 2026-09-30 version: 1-4 DOF tasks on the hand3d node, online metrics per DOF count. The latency
 figure and the vision diagnostics of the 09-30 runs are notebooks/human_vision/.
@@ -22,7 +25,7 @@ from functools import partial
 from pynwb import NWBFile, NWBHDF5IO, TimeSeries
 
 from metrics import run_metrics
-from utils import COLORS, DATA, ONLINE_METRICS, ROOT, boxes, compose, metric_panel
+from utils import COLORS, DATA, ONLINE_METRICS, ROOT, boxes, compose, describe, marker_area, metric_panel
 
 DOF_COLORS = {1: '#2a78d6', 2: '#1baf7a', 3: '#eb6834', 4: '#b455e0'}
 TITLE = '3D Human Hand Tracking'
@@ -289,8 +292,8 @@ def panel_trace_2dof(ax, d):
     ax.set_ylabel('Position (a.u.)')
 
 
-def make_figure(cfg):
-    """Fig 6: the BRAND triangulation set-up (config human_bare): stage latency, bit rate per run, a 2-DOF example."""
+def make_figure_1006(cfg):
+    """The 2026-10-06 tuning figure (config human_bare; key human_1006): stage latency, bit rate per run, a 2-DOF example."""
     layout = [['lat', 'lat', 'lat'], ['bit', 'bit', 'trace']]
     panels = {'lat': panel_stage_latency, 'bit': panel_bitrate, 'trace': panel_trace_2dof}
 
@@ -300,8 +303,8 @@ def make_figure(cfg):
         x0 = b.x1 + 0.07
         axd['trace'].set_position([x0, t.y0, l.x0 + max(l.width, 0.85) - x0, t.height * 0.92])   # clear A's tick labels
 
-    return compose(layout, panels, load_bare(cfg), (18, 10), 'figS3_human_2dof_hand_control', labels={'lat': 'A', 'bit': 'B', 'trace': 'C'},
-                   stats_bars=cfg['stats_bars']['S3'], post_layout=place)
+    return compose(layout, panels, load_bare(cfg), (18, 10), 'human_tuning_1006', labels={'lat': 'A', 'bit': 'B', 'trace': 'C'},
+                   stats_bars=False, post_layout=place)
 
 
 # ---------------------------------------------------------------- the RDB's full target sets
@@ -330,3 +333,76 @@ def save_rdb_trials(cfg):
                 rdb_latency_csv(cfg, rdb_path)
             except Exception as e:
                 print(f'could not read {rdb_path}: {e}')
+
+
+# ---------------------------------------------------------------- fig S3: 2-4 DOF runs (config human_dof, 2026-10-07)
+import human_tuning as ht
+
+def load_dof(cfg):
+    d = ht.DATA / 'human_dof'
+    return {'runs': pd.read_csv(d / 'runs.csv'), 'trials': pd.read_csv(d / 'trials.csv'),
+            'e2e': {r: v.min(axis=1) for r, v in np.load(d / 'e2e_cam_frames.npz').items()}, 'image': plt.imread(ROOT / cfg['human_dof']['task_image'])}
+
+
+def _dofs(d):
+    return sorted(d['runs']['n_dof'])
+
+
+def panel_dof_latency(ax, d):
+    """End-to-end vision latency as in fig 3 (send time - camera_start), measured from the newest of the four cameras' frames
+    in each step (the oldest is up to ~10 ms earlier: the cameras free-run), every step inside a trial, % per DOF count."""
+    bins = np.arange(10, 20.01, 0.25)
+    budget = 1000 / 60
+    handles = []
+    for n, (run, v) in zip(_dofs(d), [(r, d['e2e'][r]) for r in d['runs'].sort_values('n_dof')['run_id']]):
+        ax.hist(v, bins=bins, weights=np.full(len(v), 100 / len(v)), color=DOF_COLORS[n], alpha=0.6, label=f'{n} DOF')
+        describe(ax, f'{n} DOF', v, 'frame', n_runs=1, median_ms=np.median(v), pct_over_budget=100 * np.mean(v > budget), budget_ms=budget)
+    ax.axvline(budget, ymax=0.6, color=COLORS['budget'], ls='--')      # stops below the legend
+    ax.plot([], [], color=COLORS['budget'], ls='--', label='60 fps interval')
+    ax.set_xlim(10, 20)
+    ax.set_ylim(0, ax.get_ylim()[1] * 1.3)       # headroom: the legend sits above the bars
+    ax.set_xticks([10, 15, 20])
+    ax.set_xlabel('End-to-end latency (ms)')
+    ax.set_ylabel('Frames (%)')
+    ax.legend(loc='upper right')
+
+
+def panel_dof_bitrate(ax, d):
+    """Bit rate of every successful trial, one box per DOF count."""
+    groups = [(f'{n} DOF', d['trials'].loc[d['trials']['n_dof'] == n, 'bitrate_bits_per_s']) for n in _dofs(d)]
+    boxes(ax, groups, [DOF_COLORS[n] for n in _dofs(d)], ylabel='Bit rate (bits/s)', unit='trial')
+    plt.setp(ax.get_xticklabels(), rotation=0, ha='center')
+    ax.set_ylim(0, None)
+
+
+def panel_task_image(ax, d):
+    """The task screen: virtual hand and the target spheres, cropped square."""
+    ax.imshow(d['image'], aspect='equal')
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for sp in ax.spines.values():
+        sp.set_visible(False)
+
+
+def make_figure(cfg):
+    """Fig S3, one row: A the task screen, B bit rate per DOF count, C end-to-end latency histogram."""
+    layout = [['img', 'bit', 'lat']]
+    panels = {'img': panel_task_image, 'bit': panel_dof_bitrate, 'lat': panel_dof_latency}
+
+    def place(fig, axd):
+        from utils import STYLE
+        b, l = axd['bit'].get_position(), axd['lat'].get_position()
+        W, H = fig.get_size_inches()
+        h = b.height
+        side = h * H / W                                          # square image, as tall as the bit-rate axes
+        x0 = 0.03                                                 # room for the letter: the image is black, so A sits left of it
+        axd['img'].set_position([x0, b.y1 - h, side, h])
+        fig.text(0.0, b.y1, 'A', ha='left', va='top', fontweight='bold',
+                 fontsize=STYLE['panel_label_size'] * plt.rcParams['font.size'] / STYLE['font_size'])
+        bx = x0 + side + 0.075
+        axd['bit'].set_position([bx, b.y0, b.width, h])
+        lx = bx + b.width + 0.085
+        axd['lat'].set_position([lx, l.y0, 0.995 - lx, l.height])
+
+    return compose(layout, panels, load_dof(cfg), (18, 5.6), 'figS3_human_hand_control', labels={'bit': 'B', 'lat': 'C'},
+                   stats_bars=False, post_layout=place)

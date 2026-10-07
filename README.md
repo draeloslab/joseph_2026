@@ -102,10 +102,11 @@ significance bars are in `config.yaml`.
 
 ## Figure naming
 Fig 2 validation (held-out) | 3 War Machine latency | 4 hand control | 5 Kalman filter | 6 FES | S1 old-pipeline latency |
-S2 real-time hand control, old system (`fig3_supplement_figure.py`) | S3 human 2 DOF hand control | S4 Kalman filter, old system
+S2 real-time hand control, old system (`fig3_supplement_figure.py`) | S3 human 2-4 DOF hand control | S4 Kalman filter, old system
 (`fig4_supplement_figure.py`). Output files are `fig<N>_<name>` / `figS<N>_<name>` in `figures/`.
 Fig S1 (`latency_figure.py`) is the earlier pooled-session latency figure next to the War Machine runs.
-Fig S3 (`human_figure.make_figure`, analysis `human_tuning.py`, config `human_bare`) is the 3D human hand tracking figure on the
-BRAND triangulation set-up (2026-10-06); key `human_0930` is the earlier 09-30 version (config `human`).
+Fig S3 (`human_figure.make_figure`, analysis `human_tuning.analyze_dof`, config `human_dof`) is the 3D human hand tracking figure on the
+BRAND triangulation set-up (2026-10-07, one run each of 2, 3 and 4 DOF): per-trial stage latency by DOF count, bit rate, the task screen
+(`assets/`). Key `human_1006` is the 2026-10-06 tuning figure (config `human_bare`); `human_0930` the earlier 09-30 version (config `human`).
 Its latency figure and the vision diagnostics are in `notebooks/human_vision/` (`python notebooks/human_vision/human_latency.py`,
 `vision_diagnostics.py`); the sensor check in `notebooks/war_machine_sensors/sensor_check.py`. They write next to themselves.

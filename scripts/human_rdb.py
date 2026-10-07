@@ -65,11 +65,12 @@ def dof_stream(c, key, kw, name):
     rows = read_stream(c, key)
     if not rows:
         return
-    names = list(unpack(rows[0][1][b'data']))
+    packets = [unpack(d[b'data']) for _, d in rows]
+    names = list(dict.fromkeys(n for p in packets for n in p))     # every DOF seen (a few rows may lack one)
     kw[f'{name}_t'] = np.array([ts(d) for _, d in rows])
     kw[f'{name}_rid'] = np.array([rid(i) for i, _ in rows])
     kw[f'{name}_names'] = np.array(names)
-    kw[f'{name}_x'] = np.array([[arr(unpack(d[b'data'])[n])[0] for n in names] for _, d in rows], dtype=np.float64)
+    kw[f'{name}_x'] = np.array([[arr(p[n])[0] if n in p else np.nan for n in names] for p in packets], dtype=np.float64)
 
 
 def extract(rdb, out):
@@ -88,7 +89,7 @@ def extract(rdb, out):
         dof_stream(c, 'cursor', kw, 'cursor')
         info, succ = read_stream(c, 'trial_info'), read_stream(c, 'trial_success')
         ti = [unpack(d[b'data']) for _, d in info]
-        dof_names = list(ti[0]['targets'])
+        dof_names = list(max((b['targets'] for b in ti), key=len))   # the run's full DOF set (a run can start on fewer DOFs)
         kw.update(start_t=[ts(d) for _, d in info], result_t=[ts(d) for _, d in succ],
                   success=[bool(unpack(d[b'data'])['success']) for _, d in succ],
                   target_dofs=np.array(dof_names), targets=np.array([[b['targets'].get(n, np.nan) for n in dof_names] for b in ti]),

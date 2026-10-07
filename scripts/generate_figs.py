@@ -24,7 +24,8 @@ FIGURES = {
     '6': (fes_figure.analyze, fes_figure.make_figure),                         # FES
     'S1': (latency_figure.analyze, latency_figure.make_figure),                # old pipeline latency (next to War Machine)
     'S2': (fig3_supplement_figure.analyze, fig3_supplement_figure.make_figure),  # real-time hand control, old system
-    'S3': (human_tuning.analyze, human_figure.make_figure),                    # human 2 DOF hand control, BRAND triangulation
+    'S3': (human_tuning.analyze_dof, human_figure.make_figure),                # human 2-4 DOF hand control, BRAND triangulation (2026-10-07)
+    'human_1006': (human_tuning.analyze, human_figure.make_figure_1006),       # 2026-10-06 tuning figure (2 DOF)
     'S4': (fig4_supplement_figure.analyze, fig4_supplement_figure.make_figure),  # Kalman filter, old system
     'validation_all': (validation_figure.analyze, validation_figure.make_figure),      # earlier validation figure (all frames)
     'human_0930': (human_figure.analyze, human_figure.make_figure_0930),       # earlier 09-30 human figure (hand3d node)

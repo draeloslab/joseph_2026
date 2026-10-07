@@ -1,11 +1,11 @@
 # Which figures to make, and whether to rebuild data/ from the raw sources first.
 # Paper numbering: 2 validation (held-out frames) | 3 War Machine vision latency | 4 War Machine hand
 # control | 5 War Machine Kalman filter | 6 FES | S1 latency of the old pipeline (next to War Machine) |
-# S2 real-time hand control, old system | S3 human 2 DOF hand control (BRAND triangulation) | S4 Kalman filter, old system.
+# S2 real-time hand control, old system | S3 human 2-4 DOF hand control (BRAND triangulation) | S4 Kalman filter, old system.
 # validation_all (earlier validation figure, all frames) and human_0930 (earlier human figure) are kept but off.
 # Moved out to notebooks/: the War Machine sensor check (war_machine_sensors/), the human latency figure and the
 # vision diagnostics (human_vision/).
-figures: {2: true, 3: true, 4: true, 5: true, 6: true, S1: true, S2: true, S3: true, S4: true, validation_all: false, human_0930: false}
+figures: {2: true, 3: true, 4: true, 5: true, 6: true, S1: true, S2: true, S3: true, S4: true, validation_all: false, human_0930: false, human_1006: false}
 run_analysis: false
 
 # Whether each figure draws significance brackets/asterisks on its boxplots (Mann-Whitney U for
@@ -93,6 +93,18 @@ human_bare:
     Run-006: {setting: 'EMA 0.3, 2 hands, One-Euro + glide', session: 20261006-1532}
   figure_runs: [Run-001, Run-002, Run-003, Run-004, Run-005, Run-006]   # fig 6 latency / bit-rate boxes
   example: {run: Run-005, first_trial: null, n_trials: 5}               # fig 6 2-DOF hand-control trace
+
+# ---- fig S3 (human 2-4 DOF hand control on the BRAND triangulation set-up, 2026-10-07): human_tuning.analyze_dof ----
+# improv hand3d_bare (4 cameras 0, 1, 3, 6; 1 hand; 60 fps), vision_dofs tick_filter (Run-007 on the new build); one run per DOF count.
+# Run-008 opens with 2 trials on the 2-DOF set; they are dropped (trials() keeps only trials that target every DOF).
+human_dof:
+  day_dir: "/run/user/1000/gvfs/smb-share:server=cnpl-drmanhattan.engin.umich.edu,share=share/Data/Humans/Monkey/Jake/2026-10-07"
+  predictions: ~/predictions/20261007
+  runs:
+    Run-007: {n_dof: 2, session: 20261007-0102}
+    Run-008: {n_dof: 3, session: 20261007-0102}
+    Run-009: {n_dof: 4, session: 20261007-0102}
+  task_image: assets/human_task_screenshot.png      # the task screen (cropped), fig S3C
 
 # ---- figs 3-5 (War Machine, BRAND rig): <master>/war_machine.pkl, built by `python scripts/war_machine.py` ----
 war_machine:
