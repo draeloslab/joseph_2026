@@ -72,7 +72,7 @@ def panel_frame(ax, d, view):
         arrow = ax.annotate('', xy=(x, y), xytext=(gx + 0.2, gy - 0.08), textcoords='axes fraction', zorder=6,
                             annotation_clip=False, arrowprops=dict(arrowstyle='->', color=c, shrinkB=4,
                                                                    lw=plt.rcParams['lines.linewidth']))
-        ann = ax.text(gx, gy, f'{kp}  p={lik[k, 0]:.2f}\nLabel {x:.0f}, {y:.0f}\nFreebie {px:.0f}, {py:.0f}',
+        ann = ax.text(gx, gy, f'{kp}  c={lik[k, 0]:.2f}\nLabel {x:.0f}, {y:.0f}\nFreebie {px:.0f}, {py:.0f}',
                       transform=ax.transAxes, fontsize=plt.rcParams['font.size'], fontweight='bold', color=c,
                       ha='left', va='top', zorder=8,
                       bbox=dict(boxstyle='round,pad=0.45', fc='#111111', alpha=0.85, ec=c, lw=plt.rcParams['axes.linewidth']))

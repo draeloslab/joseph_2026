@@ -18,7 +18,6 @@ scripts/validation_figure.py | latency_figure.py | fig3_supplement_figure.py | f
 scripts/war_machine.py     War Machine master: build from the server (BRAND .rdb + vision logs) and load
 scripts/war_machine_rdb.py one run's .rdb -> npz (run by war_machine.py in the redis env, config war_machine.rdb_python)
 scripts/war_machine_figures.py   figs 3, 4 and 5 (War Machine)
-scripts/frame_drops.py     dropped frames of the vision pipeline (figs 3 and S1), from the improv logs
 notebooks/war_machine_sensors/   bend sensor vs Freebie check on every War Machine run (was fig 3_sensors)
 notebooks/human_vision/    human hand-tracking latency figure (was fig 6_latency) + vision diagnostics
 data/master/               master.pkl + nwb/<run_id>.nwb; war_machine.pkl + war_machine/<run_id>{.pkl,_neural.npz}
@@ -71,11 +70,7 @@ training runs, the example runs and four switches (`all_trials`, `fig3_merge_fps
   the significance tests are always on the run means, and every tick label gives n runs and n trials.
 - Fig 3: `fig2_merge_fps: true` pools every run into one histogram with only the 60 fps budget
   (`figures/fig3_latency_war_machine_merged`).
-- Figs 3 and S1 also write where frames were dropped: `figures/fig3_latency_war_machine_dropped_frames`,
-  `figures/figS1_latency_old_pipeline_dropped_frames`, and per run / per event csvs (`data/war_machine/dropped_frames_*.csv`,
-  `data/latency_dropped_frames_*.csv`; events carry the time in the run and the running % dropped). Pipeline drops are
-  frame-number gaps in `true_e2e_<cam>_frame_nums`, camera drops gaps in the camera's capture times; stretches with no
-  frames logged at all (pipeline restarted) are reported as offline spans, not drops. Both read the improv logs in
+- Dropped frames vs frames over the latency budget (exact counts per fps): `notebooks/war_machine_latency/frame_numbers.py`.
   `war_machine.predictions` at analysis time.
 
 Things the data needs, all handled in `war_machine.py` / `war_machine_rdb.py`:

@@ -18,11 +18,11 @@ import war_machine_figures as wmf
 
 FIGURES = {
     '2': (validation_figure_testonly.analyze, validation_figure_testonly.make_figure),   # validation, held-out frames
-    '3': (wmf.analyze_fig2, wmf.make_fig2),                                    # War Machine vision latency (+ dropped frames)
+    '3': (wmf.analyze_fig2, wmf.make_fig2),                                    # War Machine vision latency
     '4': (wmf.analyze_fig3, wmf.make_fig3),                                    # War Machine hand control
     '5': (wmf.analyze_fig4, wmf.make_fig4),                                    # War Machine Kalman filter
     '6': (fes_figure.analyze, fes_figure.make_figure),                         # FES
-    'S1': (latency_figure.analyze, latency_figure.make_figure),                # old pipeline latency (+ War Machine, dropped frames)
+    'S1': (latency_figure.analyze, latency_figure.make_figure),                # old pipeline latency (next to War Machine)
     'S2': (fig3_supplement_figure.analyze, fig3_supplement_figure.make_figure),  # real-time hand control, old system
     'S3': (human_tuning.analyze, human_figure.make_figure),                    # human 2 DOF hand control, BRAND triangulation
     'S4': (fig4_supplement_figure.analyze, fig4_supplement_figure.make_figure),  # Kalman filter, old system

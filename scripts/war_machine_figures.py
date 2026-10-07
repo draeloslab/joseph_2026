@@ -15,7 +15,6 @@ import numpy as np
 import pandas as pd
 from pynwb import NWBFile, NWBHDF5IO, TimeSeries
 
-import frame_drops
 import kf
 import utils
 import war_machine as wm
@@ -141,37 +140,19 @@ def _load_example(name):
 
 
 # ================================================================= fig 2: vision-pipeline latency
-def _frame_logs(cfg, day):
-    """Per-frame ids of the live single-camera improv sessions that day (same sessions as war_machine._vision_logs)."""
-    folder = Path(cfg['war_machine']['predictions']).expanduser() / day.replace('-', '')
-    return [frame_drops.session_log(s, 'cam2', 'front_left') for s in (sorted(folder.iterdir()) if folder.exists() else [])
-            if (s / 'true_e2e_cam2_frame_nums.npy').exists() and (s / 'TIScapture_front_left.npy').exists()]
-
-
 def analyze_fig2(cfg):
-    """Per-frame stage times during each run (frames inside the run's task window), its camera rate, and its dropped
-    frames (read from the improv logs, config war_machine.predictions; see frame_drops.py)."""
+    """Per-frame stage times during each run (frames inside the run's task window) and its camera rate."""
     OUT.mkdir(parents=True, exist_ok=True)
-    rows, frames, drop_rows, drop_events, logs = [], {}, [], [], {}
+    rows, frames = [], {}
     for rid in wm.run_ids(cfg):
-        r = wm.run(cfg, rid)
-        lat = r['latency']
+        lat = wm.run(cfg, rid)['latency']
         if not len(lat['e2e']):
             continue
         rows.append({'run_id': rid, 'fps': lat['fps'], 'frames': len(lat['e2e']),
                      **{k: lat[k].mean() for k, _ in STAGE_LABELS}, 'e2e_p95': np.percentile(lat['e2e'], 95)})
         frames[rid] = lat['e2e']
-        if r['day'] not in logs:
-            logs[r['day']] = _frame_logs(cfg, r['day'])
-        ev, summary = frame_drops.drops(logs[r['day']], *r['window_unix'])
-        drop_rows.append({'run_id': rid, 'fps': lat['fps'], **summary})
-        drop_events.append(ev.assign(run_id=rid))
     pd.DataFrame(rows).to_csv(OUT / 'latency_runs.csv', index=False)
     np.savez(OUT / 'latency_e2e_frames.npz', **frames)
-    drops = pd.DataFrame(drop_rows)
-    drops.to_csv(OUT / 'dropped_frames_runs.csv', index=False)
-    pd.concat([e for e in drop_events if len(e)] or drop_events[:1], ignore_index=True).to_csv(OUT / 'dropped_frames_events.csv', index=False)
-    frame_drops.print_summary(drops, 'run_id')
 
 
 def make_fig2(cfg):
@@ -188,11 +169,12 @@ def make_fig2(cfg):
         # 60 fps first, so the grey 30 fps histogram is drawn on top; the legend only names the two colours
         for z, (label, ids, f) in enumerate(sorted(groups, key=lambda g: -g[2])):
             e = np.concatenate([frames[i] for i in ids])
-            ax.hist(e, bins=np.arange(10, 20.05, 0.1), color=FPS_COLOR[f], alpha=0.75, zorder=2 + z,
+            ax.hist(e, bins=np.arange(15, 20.025, 0.05), color=FPS_COLOR[f], alpha=0.75, zorder=2 + z,
                     label=label.replace(' runs', ''))
             utils.describe(ax, label, e, unit='frame', n_runs=len(ids), n_sessions=ids.str[:10].nunique(),
                            pct_over_budget=100 * np.mean(e > 1000 / f), budget_ms=1000 / f, median_ms=np.median(e))
-        ax.set_xlim(10, 20); ax.set_xticks([10, 15, 20])
+        ax.set_xlim(15, 20)
+        ax.set_xticks(np.arange(15, 20.1, 1)); ax.set_xticks(np.arange(15, 20.1, 0.25), minor=True)
         ax.set_xlabel('End-to-end latency (ms)'); ax.set_ylabel('Frames')
         utils.power_offset(ax, 3)             # diagonal 10^3 at the top of the y axis
         ax.legend(loc='upper right')
@@ -207,16 +189,7 @@ def make_fig2(cfg):
     name = 'fig3_latency_war_machine_merged' if merge else 'fig3_latency_war_machine'
     fig = compose([['hist', 'stages']], {'hist': hist, 'stages': stages}, {}, (18, 6.5), name,
                   labels={'hist': 'A', 'stages': 'B'}, stats_bars=cfg['stats_bars'][3])
-    make_fig2_drops(cfg)
     return fig
-
-
-def make_fig2_drops(cfg):
-    """figures/fig3_latency_war_machine_dropped_frames: where in each run frames were dropped (data/war_machine/dropped_frames_*.csv)."""
-    runs, ev = pd.read_csv(OUT / 'dropped_frames_runs.csv'), pd.read_csv(OUT / 'dropped_frames_events.csv')
-    tot = lambda k: 100 * runs[f'{k}_dropped'].sum() / runs[f'{k}_frames'].sum()
-    return frame_drops.make_figure(runs, ev, 'run_id', 'fig3_latency_war_machine_dropped_frames',
-                                   f'War Machine dropped frames (all runs: pipeline {tot("pipeline"):.2f}%, camera {tot("camera"):.2f}%)')
 
 
 # ================================================================= fig 3: hand control

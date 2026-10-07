@@ -1,6 +1,6 @@
 # Which figures to make, and whether to rebuild data/ from the raw sources first.
-# Paper numbering: 2 validation (held-out frames) | 3 War Machine vision latency (+ dropped frames) | 4 War Machine hand
-# control | 5 War Machine Kalman filter | 6 FES | S1 latency of the old pipeline (next to War Machine, + dropped frames) |
+# Paper numbering: 2 validation (held-out frames) | 3 War Machine vision latency | 4 War Machine hand
+# control | 5 War Machine Kalman filter | 6 FES | S1 latency of the old pipeline (next to War Machine) |
 # S2 real-time hand control, old system | S3 human 2 DOF hand control (BRAND triangulation) | S4 Kalman filter, old system.
 # validation_all (earlier validation figure, all frames) and human_0930 (earlier human figure) are kept but off.
 # Moved out to notebooks/: the War Machine sensor check (war_machine_sensors/), the human latency figure and the
@@ -97,7 +97,7 @@ human_bare:
 # ---- figs 3-5 (War Machine, BRAND rig): <master>/war_machine.pkl, built by `python scripts/war_machine.py` ----
 war_machine:
   server: "/run/user/1000/gvfs/smb-share:server=cnpl-drmanhattan.engin.umich.edu,share=share/Data/Monkeys/War Machine"
-  predictions: ~/predictions                            # improv vision logs, ~/predictions/<YYYYMMDD>/<session>/ (figs 2, 2_supplement dropped frames)
+  predictions: ~/predictions                            # improv vision logs, ~/predictions/<YYYYMMDD>/<session>/ 
   rdb_python: ~/miniforge3/envs/improvPytorch/bin/python   # env with redis + msgpack, for scripts/war_machine_rdb.py
   # Every run on the rhodes_1d_universal graph on these days (other graphs, earlier days, were debugging). Left out:
   #   2026-09-30 Run-000: closed loop with an LSTM / KF6 decoder whose training run is not recorded (no bend/Freebie label)

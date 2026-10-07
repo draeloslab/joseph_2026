@@ -1,11 +1,8 @@
 """Figure 2 supplement: end-to-end latency of the Freebie pipeline in the earlier sessions, next to the War Machine runs
-(fig 2's data, data/war_machine/), plus where frames were dropped in the earlier sessions."""
-from pathlib import Path
-
+(fig 3's data, data/war_machine/)."""
 import numpy as np
 import pandas as pd
 
-import frame_drops
 import war_machine_figures as wmf
 from utils import COLORS, DATA, FRAME_BUDGET_MS, boxes, compose, describe, load_master
 
@@ -35,43 +32,7 @@ def analyze(cfg):
     np.savez(DATA / 'latency_example_actors.npz', session=sid,
              **{k: v[:n] for k, v in sessions[sid]['actors'].items()})
 
-    analyze_drops(cfg, [r['session'] for r in rows])
     wmf.analyze_fig2(cfg)      # the War Machine runs shown next to the earlier sessions
-
-
-def _session_log(cfg, sid):
-    """The prediction folder of an earlier session; its camera is the one the master's per-actor logs came from
-    (the true_e2e / TIS log whose length matches them: cam0 / 'right' on the sessions checked)."""
-    folder = Path(cfg['war_machine']['predictions']).expanduser() / sid.split('-')[0] / sid
-    n_e2e = len(load_master(cfg)['sessions'][sid]['actors']['e2e'])
-    n_acq = len(load_master(cfg)['sessions'][sid]['actors']['frame_acq'])
-    cams = [c for c in ('cam0', 'cam2') if (folder / f'true_e2e_{c}_frame_nums.npy').exists()]
-    tis = [c for c in ('right', 'top') if (folder / f'TISstarts_{c}.npy').exists()]
-    if not cams or not tis:
-        return None
-    cam = min(cams, key=lambda c: abs(len(np.load(folder / f'true_e2e_{c}.npy', mmap_mode='r')) - 1 - n_e2e))
-    tc = min(tis, key=lambda c: abs(len(np.load(folder / f'TISstarts_{c}.npy', mmap_mode='r')) - n_acq))
-    return frame_drops.session_log(folder, cam, tc)
-
-
-def analyze_drops(cfg, sids):
-    """data/latency_dropped_frames_{sessions,events}.csv: dropped frames of every session with per-actor logs, over
-    the whole session after the warm-up frames (frame_drops.py)."""
-    skip = cfg['examples']['latency_skip_first_frames']
-    rows, events = [], []
-    for sid in sids:
-        log = _session_log(cfg, sid)
-        if log is None:
-            print(f'{sid}: no frame-number logs in the prediction folder, dropped frames skipped')
-            continue
-        t = log['pipeline'][0]
-        ev, summary = frame_drops.drops([log], t[skip], t[-1])
-        rows.append({'session': sid, **summary})
-        events.append(ev.assign(session=sid))
-    runs = pd.DataFrame(rows)
-    runs.to_csv(DATA / 'latency_dropped_frames_sessions.csv', index=False)
-    pd.concat([e for e in events if len(e)] or events[:1], ignore_index=True).to_csv(DATA / 'latency_dropped_frames_events.csv', index=False)
-    frame_drops.print_summary(runs, 'session')
 
 
 def load():
@@ -139,9 +100,4 @@ LABELS = {'hist': 'A', 'stages': 'B'}
 def make_figure(cfg):
     fig = compose(LAYOUT, PANELS, load(), SIZE, 'figS1_latency_old_pipeline', labels=LABELS,
                   stats_bars=cfg['stats_bars']['S1'])
-    runs = pd.read_csv(DATA / 'latency_dropped_frames_sessions.csv')
-    ev = pd.read_csv(DATA / 'latency_dropped_frames_events.csv')
-    tot = lambda k: 100 * runs[f'{k}_dropped'].sum() / runs[f'{k}_frames'].sum()
-    frame_drops.make_figure(runs, ev, 'session', 'figS1_latency_old_pipeline_dropped_frames',
-                            f'Earlier sessions dropped frames (all: pipeline {tot("pipeline"):.2f}%, camera {tot("camera"):.2f}%)')
     return fig
