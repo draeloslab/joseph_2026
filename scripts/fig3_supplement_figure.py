@@ -96,5 +96,5 @@ LABELS = {'trace_1': 'A', 'corr': 'B', 'success_rate': 'C'}
 
 
 def make_figure(cfg):
-    return compose(LAYOUT, PANELS, load(cfg), SIZE, 'fig3_supplement_hand_control', labels=LABELS,
-                   stats_bars=cfg['stats_bars']['3_supplement'], height_ratios=HEIGHT_RATIOS)
+    return compose(LAYOUT, PANELS, load(cfg), SIZE, 'figS2_hand_control_old_system', labels=LABELS,
+                   stats_bars=cfg['stats_bars']['S2'], height_ratios=HEIGHT_RATIOS)

@@ -1,19 +1,20 @@
 # Which figures to make, and whether to rebuild data/ from the raw sources first.
-# 2, 3 and 4 are War Machine (scripts/war_machine_figures.py); 2_supplement is the earlier pooled-session latency
-# figure next to the War Machine runs, 3_supplement / 4_supplement the earlier Joker figures. Figs 2 and 2_supplement
-# also write a dropped-frames figure (figures/fig2*_dropped_frames) + data/**/dropped_frames csvs.
+# Paper numbering: 2 validation (held-out frames) | 3 War Machine vision latency (+ dropped frames) | 4 War Machine hand
+# control | 5 War Machine Kalman filter | 6 FES | S1 latency of the old pipeline (next to War Machine, + dropped frames) |
+# S2 real-time hand control, old system | S3 human 2 DOF hand control (BRAND triangulation) | S4 Kalman filter, old system.
+# validation_all (earlier validation figure, all frames) and human_0930 (earlier human figure) are kept but off.
 # Moved out to notebooks/: the War Machine sensor check (war_machine_sensors/), the human latency figure and the
 # vision diagnostics (human_vision/).
-figures: {1: false, 1_heldout: true, 2: true, 2_supplement: true, 3: true, 3_supplement: true, 4: true, 4_supplement: true, 5: true}
+figures: {2: true, 3: true, 4: true, 5: true, 6: true, S1: true, S2: true, S3: true, S4: true, validation_all: false, human_0930: false}
 run_analysis: false
 
 # Whether each figure draws significance brackets/asterisks on its boxplots (Mann-Whitney U for
 # independent groups, Wilcoxon signed-rank for paired-by-session comparisons, Holm-corrected
 # within each panel). The underlying tests always run and are always written to
 # figures/<fig>_stats.csv regardless of this setting -- it only controls the bars on the plot.
-stats_bars: {1: false, 1_heldout: false, 2: true, 2_supplement: true, 3: true, 3_supplement: true, 4: true, 4_supplement: true, 5: false, 6: true}
+stats_bars: {2: false, 3: true, 4: true, 5: true, 6: false, S1: true, S2: true, S3: false, S4: true, validation_all: false, human_0930: true}
 
-# Online-metrics boxplots (figs 3 & 4): how the Bend/Freebie groups are built.
+# Online-metrics boxplots (figs S2 & S4): how the Bend/Freebie groups are built.
 #   split_feature: split Freebie into index_angle vs pip_y (see utils.online_feature / FEATURE_CUTOFF)
 #                  instead of one combined Freebie group.
 #   split_dof:     further split every group into 1 DOF / 2 DOF.
@@ -25,16 +26,19 @@ online_metrics: {split_feature: true, split_dof: false, all_trials: true}
 
 # Publication style, shared by every figure (see scripts/utils.py:apply_style).
 style:
+  # print sizes (pt) on the journal page: every figure is shrunk to figure_width_mm (double column = 180 mm) and drawn
+  # so that text and lines come out at these sizes (utils.print_rc)
+  figure_width_mm: 180
   font_family: [Arial, DejaVu Sans]
-  font_size: 14
-  title_size: 18
-  label_size: 16
-  tick_size: 13
-  legend_size: 12
-  panel_label_size: 22
-  line_width: 2.5
-  axes_line_width: 1.5
-  marker_size: 40
+  font_size: 7
+  title_size: 7.5
+  label_size: 7.5
+  tick_size: 6.5
+  legend_size: 6.5
+  panel_label_size: 10
+  line_width: 1.25
+  axes_line_width: 1.0
+  marker_size: 9         # pt^2 (box dots use 0.9x / 1.6x this diameter)
   dpi: 300
   palette:
     bend: '#111111'
@@ -44,7 +48,7 @@ style:
     freebie: '#2a78d6'
     target_hit: '#d9d9d9'
     target_miss: '#f6c5c5'
-    budget: '#d62728'
+    budget: '#111111'      # frame-budget lines (black in every figure)
     frame_acq: '#0a11c4'
     inference: '#519bc6'
     sender: '#2ccded'
@@ -56,15 +60,15 @@ style:
     new_rt: '#1baf7a'
     keypoints: ['#FF4444', '#FF9900', '#33CC33', '#3399FF', '#B455E0']   # DIP PIP MCP WRIST MRS
     fingers: {thumb: '#e0475f', index: '#f2a93b', middle: '#6db38a', ring: '#1f8ea3', pinky: '#a77bca', palm: '#9e9e9e'}   # fig 5 skeleton
-    fes_x: '#22404f'
+    fes_x: '#f5a300'       # fig 5 fingertip x (amber), y below (red-orange)
     fes_y: '#e5734f'
-    stim_window: '#f3dfa2'
+    stim_window: '#dedede'
 
 # ---- analysis input: the master folder every figure is rebuilt from (master.pkl + nwb/<run>.nwb) ----
 master: data/master
 neuraldecoding_path: ~/Code/neuraldecoding      # clone of the lab's neuraldecoding repo (NWB loading, metrics, KF)
 
-# ---- fig 6 (3D human hand tracking): one day of Run-XXX/Run-XXX.{nwb,rdb} ----
+# ---- human_0930 (3D human hand tracking, earlier version): one day of Run-XXX/Run-XXX.{nwb,rdb} ----
 human:
   day_dir: "/run/user/1000/gvfs/smb-share:server=cnpl-drmanhattan.engin.umich.edu,share=share/Data/Humans/Jake/2026-09-30"
   runs: {Run-002: 1, Run-003: 2, Run-015: 3, Run-016: 4}   # run -> DOF task (Run-001 ignored)
@@ -73,7 +77,24 @@ human:
   prediction_dir: ~/predictions/20260930/20260930-1834   # vision pipeline folder covering the day; cut into each run's time window
   rdb_python: ~/miniforge3/envs/improvPytorch/bin/python   # env with redis + msgpack, for scripts/human_rdb_latency.py (fig 6's RDB target sets)
 
-# ---- figs 2-4 (War Machine, BRAND rig): <master>/war_machine.pkl, built by `python scripts/war_machine.py` ----
+# ---- fig S3 (3D human hand tracking on the BRAND triangulation set-up, 2026-10-06): scripts/human_tuning.py ----
+# improv hand3d_bare (4 cameras, 60 fps, ONNX/TensorRT MediaPipe, geometric association) -> UDP joint angles ->
+# BRAND rhodes_2d_vision_bare (vision -> vision_dofs -> control_mux), 2 DOF: index MCP -> index, ring MCP -> mrs.
+human_bare:
+  day_dir: "/run/user/1000/gvfs/smb-share:server=cnpl-drmanhattan.engin.umich.edu,share=share/Data/Humans/Monkey/Jake/2026-10-06"
+  predictions: ~/predictions/20261006
+  angle_range: {index: [14, 80], ring: [20, 80]}      # vision_dofs finger_angle_range (deg), same every run
+  runs:   # setting = what changed vs run 1 (session notes); session = improv prediction folder
+    Run-001: {setting: 'EMA 0.3', session: 20261006-1506}
+    Run-002: {setting: 'EMA 0.3, 60 Hz out', session: 20261006-1506}
+    Run-003: {setting: 'SMA 5', session: 20261006-1506}
+    Run-004: {setting: 'SMA 10', session: 20261006-1506}
+    Run-005: {setting: 'EMA 0.3, 2 hands', session: 20261006-1529}
+    Run-006: {setting: 'EMA 0.3, 2 hands, One-Euro + glide', session: 20261006-1532}
+  figure_runs: [Run-001, Run-002, Run-003, Run-004, Run-005, Run-006]   # fig 6 latency / bit-rate boxes
+  example: {run: Run-005, first_trial: null, n_trials: 5}               # fig 6 2-DOF hand-control trace
+
+# ---- figs 3-5 (War Machine, BRAND rig): <master>/war_machine.pkl, built by `python scripts/war_machine.py` ----
 war_machine:
   server: "/run/user/1000/gvfs/smb-share:server=cnpl-drmanhattan.engin.umich.edu,share=share/Data/Monkeys/War Machine"
   predictions: ~/predictions                            # improv vision logs, ~/predictions/<YYYYMMDD>/<session>/ (figs 2, 2_supplement dropped frames)
@@ -81,26 +102,30 @@ war_machine:
   # Every run on the rhodes_1d_universal graph on these days (other graphs, earlier days, were debugging). Left out:
   #   2026-09-30 Run-000: closed loop with an LSTM / KF6 decoder whose training run is not recorded (no bend/Freebie label)
   #   2026-10-05 Run-003, Run-004: closed loop, not in the analysis yet
+  #   2026-10-06 Run-005 (throw-away test), Run-010, Run-011 (beta_velocity 1, 20 trials / aborted); 6-9 ran beta_velocity 0
   # Decoder trials inside 09-30 Run-001, 007, 008 (decoder-setting tests per the notes) are out of their runs' mode.
   runs:
     '2026-09-30': [Run-001, Run-002, Run-003, Run-004, Run-005, Run-006, Run-007, Run-008, Run-009, Run-010, Run-011, Run-012, Run-013, Run-014]
     '2026-10-02': [Run-001, Run-002, Run-003, Run-004, Run-005, Run-006, Run-007, Run-008]
     '2026-10-05': [Run-001, Run-002]
+    '2026-10-06': [Run-001, Run-002, Run-003, Run-004, Run-006, Run-007, Run-008, Run-009]   # 6-9 = ABAB KF2 (A) / KF3 (B)
   # hand-control run each decoder was trained on (session notes); the decoder's bend / Freebie label is that run's mode
   kf_training_runs:
     '2026-10-02': {decodeParamsKalmanFilter0.pkl: Run-001, decodeParamsKalmanFilter1.pkl: Run-002,
                  decodeParamsKalmanFilter2.pkl: Run-005, decodeParamsKalmanFilter3.pkl: Run-006}
+    '2026-10-06': {decodeParamsKalmanFilter0.pkl: Run-001, decodeParamsKalmanFilter1.pkl: Run-002,
+                 decodeParamsKalmanFilter2.pkl: Run-003, decodeParamsKalmanFilter3.pkl: Run-004}   # A = KF2, B = KF3
   decoder_channels: [16, 18, 20, 22, 24, 26, 28, 30]    # brand-monkeyrig decoder_configs/kf_rhodes.yaml index_selector_emg
-  all_trials: true          # figs 3/4 online metrics: box + dots of every trial (true) or of one mean per run (false).
+  all_trials: true          # figs 4/5 online metrics: box + dots of every trial (true) or of one mean per run (false).
                             # Stats are on the run means either way (no pseudo-replication); ticks show n runs, n trials.
-  fig2_merge_fps: false     # fig 2: pool every run (30 + 60 fps) into one histogram with only the 60 fps budget line
-                            # (saved as fig2_war_machine_merged)
+  fig3_merge_fps: false     # fig 3: pool every run (30 + 60 fps) into one histogram with only the 60 fps budget line
+                            # (saved as fig3_latency_war_machine_merged)
   exclude_closed_loop: []   # fig 4 online metrics without these runs, e.g. [2026-10-02_Run-003, 2026-10-02_Run-004]
                             # (KF0 / KF1, trained before the 10-02 "FIXED RANGES" fix)
   offline_kf_min_trials: 0  # fig 4D: skip hand-control runs with fewer in-mode trials (e.g. 30 drops 09-30 Run-001, 002, 007, 008, 014)
   hand_control_trace: {run: 2026-10-02_Run-005, first_trial: null, n_trials: 6}   # bend drove, Freebie alongside
-  freebie_decoder_trace: {run: 2026-10-02_Run-008, first_trial: null, n_trials: 8}   # KF3, trained on Freebie (Run-006)
-  bend_decoder_trace: {run: 2026-10-02_Run-007, first_trial: null, n_trials: 8}      # KF2, trained on bend (Run-005)
+  freebie_decoder_trace: {run: 2026-10-06_Run-007, first_trial: null, n_trials: 6, select: shortest_success}   # KF3 (B), trained on Freebie (Run-004)
+  bend_decoder_trace: {run: 2026-10-06_Run-006, first_trial: null, n_trials: 6, select: shortest_success}      # KF2 (A), trained on bend (Run-003)
 
 # Example sessions used by single-session panels.
 examples:

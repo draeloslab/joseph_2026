@@ -20,19 +20,20 @@ OFFLINE = [('Index', 'Bend sensor', ['bend (same window)'], 'index_pos'),
            ('MRS', 'Freebie MRS x', ['index_angle+mrs_x'], 'ring_pos')]
 SIGNAL_COLOR = {'Bend sensor': 'bend', 'Freebie index angle': 'index_angle', 'Freebie PIP y': 'pip_y', 'Freebie MRS x': 'mrs_x'}
 
-OFFLINE_METRICS = {'nmse_valid': 'Normalized MSE\n(MSE / target variance)', 'correlation_valid': 'Correlation (r)'}
+OFFLINE_METRICS = {'nmse_valid': 'Normalized MSE', 'correlation_valid': 'Correlation (r)'}
 
-# A = Freebie KF, B = bend KF (index + MRS stacked in one axis each), C = online metrics (2 per row), D = offline KF
-# (2x2) under A and B. Columns are in box units: D's index panels have 3 boxes and its MRS panels 2, so a 0.5-box
-# column lets A and B split that 5-box block evenly.
+# A = Freebie KF, B = bend KF (index + MRS stacked in one axis each), C = online metrics, D = offline KF (index, MRS)
 m = list(ONLINE_METRICS)
 _D = [f'{mt}_{dof}' for mt in OFFLINE_METRICS for dof in ('Index', 'MRS')]
-LAYOUT = [['freebie', 'bend', 'bend', m[0], m[1]],
-          [_D[0], _D[0], _D[1], m[2], m[3]],
-          [_D[2], _D[2], _D[3], m[4], m[5]]]
-WIDTH_RATIOS = [2.5, 0.5, 2, 3, 3]
-SIZE = (22, 17)
-HEIGHT_RATIOS = [1, 1, 1]
+# one row of traces, the six online metrics over two rows, the offline KF (index | MRS) over two rows: at the
+# 180 mm print width a row holds ~9 boxes, so the old 3-row layout (11 boxes a row) overlapped
+LAYOUT = [['freebie'] * 5 + ['bend'] * 5,
+          [m[0]] * 3 + [m[1]] * 3 + [m[2]] * 3 + ['.'],
+          [m[3]] * 3 + [m[4]] * 3 + [m[5]] * 3 + ['.'],
+          [_D[0]] * 3 + [_D[2]] * 3 + [_D[1]] * 2 + [_D[3]] * 2]     # index: nmse, r | MRS: nmse, r
+WIDTH_RATIOS = None
+SIZE = (21, 16.5)
+HEIGHT_RATIOS = [1.3, 1, 1, 1]
 TRACE_DOFS = [(1, 'Index', 'index_angle', 1.45), (3, 'MRS', 'mrs_x', 0.0)]   # (dof, label, freebie colour, y offset)
 
 
@@ -100,7 +101,7 @@ def panel_decode(ax, d, key):
     ax.set_ylim(-0.15, TRACE_DOFS[0][3] + 1.4)
     ax.set_xlim(0, trials['stop_time'].iloc[-1] - t0)
     ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Decoded position (a.u.)')
+    ax.set_ylabel('Position (a.u.)')
     ax.set_title(DECODERS[key])
 
 
@@ -127,6 +128,6 @@ LABELS = {'freebie': 'A', 'bend': 'B', 'success_rate': 'C', 'nmse_valid_Index': 
 
 
 def make_figure(cfg):
-    return compose(LAYOUT, PANELS, load(cfg), SIZE, 'fig4_supplement_kf_decode', labels=LABELS,
-                   stats_bars=cfg['stats_bars']['4_supplement'], height_ratios=HEIGHT_RATIOS,
+    return compose(LAYOUT, PANELS, load(cfg), SIZE, 'figS4_kalman_filter_old_system', labels=LABELS,
+                   stats_bars=cfg['stats_bars']['S4'], height_ratios=HEIGHT_RATIOS,
                    width_ratios=WIDTH_RATIOS)

@@ -1,6 +1,6 @@
 # joseph_2026
 
-Code for the paper's Figures 1–6 and their supplements. Everything is rebuilt from the
+Code for the paper's figures 2–6 and supplements S1–S4. Everything is rebuilt from the
 **master folder `data/master/`**: `master.pkl` plus one small NWB per xPC run. You do not need the lab
 server, the raw Freebie folders or any other lab repo. The only outside dependency is a clone of the lab's
 [neuraldecoding](https://github.com/chesteklab/neuraldecoding) repo (set `neuraldecoding_path` in `config.yaml`),
@@ -17,8 +17,8 @@ notebooks/walkthrough.ipynb   guided tour of the master data, every figure and e
 scripts/validation_figure.py | latency_figure.py | fig3_supplement_figure.py | fig4_supplement_figure.py | human_figure.py
 scripts/war_machine.py     War Machine master: build from the server (BRAND .rdb + vision logs) and load
 scripts/war_machine_rdb.py one run's .rdb -> npz (run by war_machine.py in the redis env, config war_machine.rdb_python)
-scripts/war_machine_figures.py   figs 2, 3 and 4 (War Machine)
-scripts/frame_drops.py     dropped frames of the vision pipeline (figs 2 and 2_supplement), from the improv logs
+scripts/war_machine_figures.py   figs 3, 4 and 5 (War Machine)
+scripts/frame_drops.py     dropped frames of the vision pipeline (figs 3 and S1), from the improv logs
 notebooks/war_machine_sensors/   bend sensor vs Freebie check on every War Machine run (was fig 3_sensors)
 notebooks/human_vision/    human hand-tracking latency figure (was fig 6_latency) + vision diagnostics
 data/master/               master.pkl + nwb/<run_id>.nwb; war_machine.pkl + war_machine/<run_id>{.pkl,_neural.npz}
@@ -34,7 +34,7 @@ figures/all_stats.csv      every figure's descriptives (n sessions / runs / tria
 Needs numpy, pandas, scipy, matplotlib >= 3.9, pyyaml, pillow, plus the neuraldecoding environment.
 ```
 python scripts/generate_figs.py                     # draw the figures enabled in config.yaml from data/
-python scripts/generate_figs.py --figs 2 2_supplement   # just some of them
+python scripts/generate_figs.py --figs 3 S1   # just some of them
 python scripts/generate_figs.py --analysis          # rerun the analysis from the master first (KFs from cache)
 python scripts/generate_figs.py --analysis --retrain  # ... and retrain the offline KFs
 ```
@@ -56,24 +56,23 @@ there, this repo only reads the result.
   metric functions expect), `finger_angles`, `decode` (closed-loop runs) and `EMG` (runs behind a Freebie KF, first
   16 of the 96 channels; the rest carry no signal).
 
-## War Machine (figs 2, 3, 4)
-Figures 2-4 now come from War Machine on the BRAND rig (1 DOF, index). The earlier figures are `2_supplement`,
-`3_supplement`, `4_supplement`.
+## War Machine (figs 3, 4, 5)
+Figures 3-5 come from War Machine on the BRAND rig (1 DOF, index). The earlier-system figures are S1, S2 and S4.
 ```
 python scripts/war_machine.py                       # 1. server -> data/master/war_machine.pkl (resumes; --rebuild re-extracts)
-python scripts/generate_figs.py --figs 2 3 4 --analysis   # 2. master -> data/war_machine/ -> figures/
+python scripts/generate_figs.py --figs 3 4 5 --analysis   # 2. master -> data/war_machine/ -> figures/
 ```
 Step 1 needs the CNPL share mounted and the redis env (`war_machine.rdb_python`); step 2 only the master. Which runs
 are in, and why the others are not, is `config.yaml` `war_machine.runs`; the rest of that block holds the decoder
-training runs, the example runs and four switches (`all_trials`, `fig2_merge_fps`, `exclude_closed_loop`,
+training runs, the example runs and four switches (`all_trials`, `fig3_merge_fps`, `exclude_closed_loop`,
 `offline_kf_min_trials`).
 
-- Figs 3/4 online metrics: the box and dots show every trial (`all_trials: true`) or one mean per run (`false`);
+- Figs 4/5 online metrics: the box and dots show every trial (`all_trials: true`) or one mean per run (`false`);
   the significance tests are always on the run means, and every tick label gives n runs and n trials.
-- Fig 2: `fig2_merge_fps: true` pools every run into one histogram with only the 60 fps budget
-  (`figures/fig2_war_machine_merged`).
-- Figs 2 and 2_supplement also write where frames were dropped: `figures/fig2_war_machine_dropped_frames`,
-  `figures/fig2_supplement_dropped_frames`, and per run / per event csvs (`data/war_machine/dropped_frames_*.csv`,
+- Fig 3: `fig2_merge_fps: true` pools every run into one histogram with only the 60 fps budget
+  (`figures/fig3_latency_war_machine_merged`).
+- Figs 3 and S1 also write where frames were dropped: `figures/fig3_latency_war_machine_dropped_frames`,
+  `figures/figS1_latency_old_pipeline_dropped_frames`, and per run / per event csvs (`data/war_machine/dropped_frames_*.csv`,
   `data/latency_dropped_frames_*.csv`; events carry the time in the run and the running % dropped). Pipeline drops are
   frame-number gaps in `true_e2e_<cam>_frame_nums`, camera drops gaps in the camera's capture times; stretches with no
   frames logged at all (pipeline restarted) are reported as offline spans, not drops. Both read the improv logs in
@@ -94,6 +93,11 @@ Runs with `excluded = True` are dropped from the online-metrics figures. Current
 flagged closed loop but its decoder output is constant (-1) for the whole run and the bend sensor is what hits the
 targets. Its Freebie-vs-bend correlations and offline KFs are still used.
 
+## Print size
+Every figure is drawn in its own design inches and saved at `style.figure_width_mm` (180 mm, double column): fonts,
+lines and markers in `config.yaml` `style` are the printed sizes (`utils.print_rc`). Subplot titles are removed (except
+panels flagged `ax.keep_title`), automatic axes get at most 4 ticks, and frame-budget lines are black.
+
 ## Changing a figure
 Each figure module has one function per panel and a `LAYOUT` (matplotlib `subplot_mosaic`) at the top; move or
 reorder panels by editing `LAYOUT`. Fonts, line widths, the colour palette and whether each figure draws
@@ -102,9 +106,11 @@ significance bars are in `config.yaml`.
 `data/master/` is a few hundred MB; host it outside git (LFS, Zenodo, ...) if you publish the repo.
 
 ## Figure naming
-Fig 3 and Fig 4 are the War Machine figures, built by `notebooks/war_machine_2026-09-30/build_fig3.py` / `build_fig4.py`.
-The earlier 3 and 4 are now `fig3_supplement_figure.py` / `fig4_supplement_figure.py` (config keys `3_supplement`, `4_supplement`).
-Fig 2_supplement (`latency_figure.py`) is the earlier pooled-session latency figure next to the War Machine runs.
-Fig 6 (`human_figure.py`, key `6`) is the 3D human hand tracking figure; its data paths are under `human:` in `config.yaml`.
+Fig 2 validation (held-out) | 3 War Machine latency | 4 hand control | 5 Kalman filter | 6 FES | S1 old-pipeline latency |
+S2 real-time hand control, old system (`fig3_supplement_figure.py`) | S3 human 2 DOF hand control | S4 Kalman filter, old system
+(`fig4_supplement_figure.py`). Output files are `fig<N>_<name>` / `figS<N>_<name>` in `figures/`.
+Fig S1 (`latency_figure.py`) is the earlier pooled-session latency figure next to the War Machine runs.
+Fig S3 (`human_figure.make_figure`, analysis `human_tuning.py`, config `human_bare`) is the 3D human hand tracking figure on the
+BRAND triangulation set-up (2026-10-06); key `human_0930` is the earlier 09-30 version (config `human`).
 Its latency figure and the vision diagnostics are in `notebooks/human_vision/` (`python notebooks/human_vision/human_latency.py`,
 `vision_diagnostics.py`); the sensor check in `notebooks/war_machine_sensors/sensor_check.py`. They write next to themselves.

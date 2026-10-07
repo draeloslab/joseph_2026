@@ -9,22 +9,22 @@ the image panel, which needed swapping (the original hardcoded frame turned out 
 frame; see that script's docstring)."""
 from functools import partial
 
+import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 from scipy.stats import gaussian_kde
 
-from utils import COLORS, DATA, compose, load_master, significance, describe
+from utils import COLORS, DATA, compose, load_master, significance, describe, marker_area
 
 TOP_KPS = ['DIP', 'PIP', 'MCP', 'WRIST']
 KEYPOINTS = TOP_KPS + ['MRS']
 LIKELIHOOD_MIN = 0.99
 THRESHOLD_PX = 20      # size of the smallest joint
-TOP_OFFSETS = {'DIP': (60, -40), 'PIP': (-60, -50), 'MCP': (-60, 40), 'WRIST': (-40, 160)}   # px; kept inside CROP_X
+LABEL_GRID = [(0.03, 0.42), (0.52, 0.42), (0.03, 0.20), (0.52, 0.20)]   # DIP PIP MCP WRIST label boxes (axes fraction)
 
 LAYOUT = [['top', 'side', 'box']]
 SIZE = (20, 7)
 CROP_X = {'top': (360, 1440), 'side': (760, 1840)}   # 1080 px wide x full 1080 px height = square, keypoints + labels inside
-LABEL_SIZE = 12
 
 OUT_DIR = DATA / 'keypoint_frames_heldout'
 
@@ -78,13 +78,20 @@ def panel_frame(ax, d, view):
         (x, y), (px, py) = man[k], pred[k]
         ax.scatter(x, y, s=200, color=c, edgecolors='white', linewidths=2, zorder=5, label=kp)
         ax.scatter(px, py, s=140, marker='x', color=c, linewidths=3, zorder=6)
-        dx, dy = TOP_OFFSETS[kp] if view == 'top' else (25 if x < 0.78 * w else -25, -38 if y > 0.1 * h else 38)
-        ax.annotate(f'{kp}\nLabel: ({x:.0f}, {y:.0f})\nFreebie: ({px:.0f}, {py:.0f})  p={lik[k, 0]:.2f}',
-                    xy=(x, y), xytext=((x + px) / 2 + dx, (y + py) / 2 + dy), fontsize=LABEL_SIZE, fontweight='bold',
-                    color=c, ha='left' if dx > 0 else 'right', va='center', zorder=7,
-                    bbox=dict(boxstyle='round,pad=0.35', fc='black', alpha=0.65, ec=c, lw=0.8),
-                    arrowprops=dict(arrowstyle='->', color=c, lw=1.4))
+        # labels in a fixed 2 x 2 grid over the empty lower part of the image, an arrow to each keypoint
+        gx, gy = LABEL_GRID[k] if view == 'top' else (0.03, 0.30)
+        # arrow from the box's middle, drawn under the boxes so one keypoint's arrow never crosses another's label
+        arrow = ax.annotate('', xy=(x, y), xytext=(gx + 0.2, gy - 0.08), textcoords='axes fraction', zorder=6,
+                            annotation_clip=False, arrowprops=dict(arrowstyle='->', color=c, shrinkB=4,
+                                                                   lw=plt.rcParams['lines.linewidth']))
+        ann = ax.text(gx, gy, f'{kp}  p={lik[k, 0]:.2f}\nLabel {x:.0f}, {y:.0f}\nFreebie {px:.0f}, {py:.0f}',
+                      transform=ax.transAxes, fontsize=plt.rcParams['font.size'], fontweight='bold', color=c,
+                      ha='left', va='top', zorder=8,
+                      bbox=dict(boxstyle='round,pad=0.45', fc='#111111', alpha=0.85, ec=c, lw=plt.rcParams['axes.linewidth']))
+        for a in (arrow, ann):
+            a.set_in_layout(False)                # labels sit on the image; don't shrink the image to fit them
     ax.set_title('Top view' if view == 'top' else 'Side view')
+    ax.keep_title = True                          # camera name: kept by compose
 
 
 def panel_hist(ax, d):
@@ -103,15 +110,15 @@ def panel_hist(ax, d):
 def panel_box(ax, d):
     data = [d['errors'][kp] for kp in KEYPOINTS]
     bp = ax.boxplot(data, tick_labels=KEYPOINTS, widths=0.55, patch_artist=True, showfliers=False,
-                    medianprops={'color': '#111111', 'lw': 2})
+                    medianprops={'color': '#111111'})
     rng = np.random.default_rng(0)
     for i, (patch, x, c) in enumerate(zip(bp['boxes'], data, COLORS['keypoints'])):
         patch.set(facecolor=c, alpha=0.6, edgecolor='#444444')
-        ax.scatter(rng.normal(i + 1, 0.06, len(x)), x, s=6, color=c, alpha=0.35, zorder=2, linewidths=0)
-    ax.scatter(np.arange(1, len(data) + 1), [np.mean(x) for x in data], marker='D', s=40,
+        ax.scatter(rng.normal(i + 1, 0.06, len(x)), x, s=marker_area(0.9), color=c, alpha=0.4, zorder=2, linewidths=0)
+    ax.scatter(np.arange(1, len(data) + 1), [np.mean(x) for x in data], marker='D', s=marker_area(1.8),
                color='#111111', zorder=4, label='Mean')
     ax.axhline(THRESHOLD_PX, color='gray', ls='--', label=f'Smallest joint ({THRESHOLD_PX} px)')
-    ax.set_ylim(0, max(THRESHOLD_PX * 1.15, np.percentile(np.concatenate(data), 99.5)))
+    ax.set_ylim(0, max(THRESHOLD_PX * 1.4, np.percentile(np.concatenate(data), 99.5)))
     ax.set_ylabel('Euclidean distance error (px)')
     ax.set_title('Error per keypoint (held-out)')
     ax.n_boxes = len(data)                        # compose() sets the width: same box width as figs 3/4
@@ -126,5 +133,5 @@ PANELS = {'top': partial(panel_frame, view='top'), 'side': partial(panel_frame, 
 
 
 def make_figure(cfg):
-    return compose(LAYOUT, PANELS, load(), SIZE, 'fig1_validation_heldout',
-                   stats_bars=cfg['stats_bars'].get('1_heldout', cfg['stats_bars'][1]))
+    return compose(LAYOUT, PANELS, load(), SIZE, 'fig2_validation_heldout',
+                   stats_bars=cfg['stats_bars'][2])

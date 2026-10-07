@@ -98,22 +98,20 @@ def actor_panel(ax, a, title):
 
 
 def panel_hist(ax, d):
-    bins = np.arange(0, 80.5, 0.5)
-    ax.hist(d['e2e'], bins=bins, color=COLORS['e2e'], alpha=0.6,
-            label=f"Earlier sessions (n={d['n_sessions']}, {len(d['e2e']):,} frames)")
-    ax.hist(d['wm_e2e'], bins=bins, color=WM_COLOR, alpha=0.6,
-            label=f"War Machine runs (n={len(d['wm_runs'])}, {len(d['wm_e2e']):,} frames)")
-    ax.axvline(FRAME_BUDGET_MS, color=COLORS['budget'], ls='--', label=f'30 FPS budget ({FRAME_BUDGET_MS:.1f} ms)')
-    describe(ax, 'Earlier sessions', d['e2e'], unit='frame', n_sessions=d['n_sessions'],
+    # each group as % of its own frames: Monkey R has ~5x the frames and would flatten Monkey N; the legend only names the colours
+    bins = np.arange(10, 45.25, 0.25)
+    pct = lambda x: np.full(len(x), 100 / len(x))
+    ax.hist(d['e2e'], bins=bins, weights=pct(d['e2e']), color=COLORS['e2e'], alpha=0.75, label='Monkey N')
+    ax.hist(d['wm_e2e'], bins=bins, weights=pct(d['wm_e2e']), color=WM_COLOR, alpha=0.6, label='Monkey R')
+    describe(ax, 'Monkey N', d['e2e'], unit='frame', n_sessions=d['n_sessions'], median_ms=np.median(d['e2e']),
              pct_over_budget=100 * np.mean(d['e2e'] > FRAME_BUDGET_MS), budget_ms=FRAME_BUDGET_MS)
-    describe(ax, 'War Machine runs', d['wm_e2e'], unit='frame', n_runs=len(d['wm_runs']),
+    describe(ax, 'Monkey R', d['wm_e2e'], unit='frame', n_runs=len(d['wm_runs']), median_ms=np.median(d['wm_e2e']),
              n_sessions=d['wm_runs']['run_id'].str[:10].nunique(), pct_over_budget_30fps=100 * np.mean(d['wm_e2e'] > FRAME_BUDGET_MS))
-    ax.axvline(np.median(d['e2e']), color='#111111', ls=':', label=f"Median (earlier sessions) {np.median(d['e2e']):.1f} ms")
-    ax.axvline(np.median(d['wm_e2e']), color=WM_COLOR, ls=':', label=f"Median (War Machine) {np.median(d['wm_e2e']):.1f} ms")
+    ax.set_xlim(10, 45)
+    ax.set_xticks([10, 20, 30, 40])
     ax.set_xlabel('End-to-end latency (ms)')
-    ax.set_ylabel('Frames')
-    ax.set_title('End-to-end latency distribution')
-    ax.legend()
+    ax.set_ylabel('Frames (%)')
+    ax.legend(loc='upper right')
 
 
 def panel_actors(ax, d):
@@ -122,18 +120,14 @@ def panel_actors(ax, d):
 
 def panel_stages(ax, d):
     # per actor: mean over the earlier sessions (one point each); War Machine: end-to-end mean of each run
-    groups = [(label, d['stages'][key]) for key, label in ACTORS] + [('War Machine\nend-to-end', d['wm_runs']['e2e'])]
+    groups = [(label, d['stages'][key]) for key, label in ACTORS] + [('Monkey R\nend-to-end', d['wm_runs']['e2e'])]
     colors = [COLORS[k] for k, _ in ACTORS] + [WM_COLOR]
-    boxes(ax, groups, colors, ylabel='Processing time (ms)', describe_groups=False,
-          title=f"Per actor: session means (n={len(d['stages'])})\nvs War Machine: run means (n={len(d['wm_runs'])})")
+    boxes(ax, groups, colors, ylabel='Processing time (ms)', describe_groups=False)
     for (label, v), unit in zip(groups, ['session'] * len(ACTORS) + ['run']):
         frames = d['stages']['n_frames'].sum() if unit == 'session' else d['wm_runs']['frames'].sum()
         describe(ax, label, v, unit=unit, n_frames=frames)
     ax.axhline(FRAME_BUDGET_MS, color=COLORS['budget'], ls='--')
     ax.set_ylim(0, FRAME_BUDGET_MS * 1.15)
-    # label the line directly (a legend with one entry floated mid-panel)
-    ax.text(0.99, FRAME_BUDGET_MS, f'30 FPS budget ({FRAME_BUDGET_MS:.1f} ms)', transform=ax.get_yaxis_transform(),
-            ha='right', va='bottom', color=COLORS['budget'], fontweight='bold')
 
 
 # panel_actors (the per-actor example trace, panel B) isn't in PANELS/LAYOUT right now -- see LAYOUT above
@@ -143,11 +137,11 @@ LABELS = {'hist': 'A', 'stages': 'B'}
 
 
 def make_figure(cfg):
-    fig = compose(LAYOUT, PANELS, load(), SIZE, 'fig2_supplement_latency', labels=LABELS,
-                  stats_bars=cfg['stats_bars']['2_supplement'])
+    fig = compose(LAYOUT, PANELS, load(), SIZE, 'figS1_latency_old_pipeline', labels=LABELS,
+                  stats_bars=cfg['stats_bars']['S1'])
     runs = pd.read_csv(DATA / 'latency_dropped_frames_sessions.csv')
     ev = pd.read_csv(DATA / 'latency_dropped_frames_events.csv')
     tot = lambda k: 100 * runs[f'{k}_dropped'].sum() / runs[f'{k}_frames'].sum()
-    frame_drops.make_figure(runs, ev, 'session', 'fig2_supplement_dropped_frames',
+    frame_drops.make_figure(runs, ev, 'session', 'figS1_latency_old_pipeline_dropped_frames',
                             f'Earlier sessions dropped frames (all: pipeline {tot("pipeline"):.2f}%, camera {tot("camera"):.2f}%)')
     return fig

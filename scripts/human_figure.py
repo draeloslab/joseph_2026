@@ -1,6 +1,8 @@
 """
-Figure 6: 3D human hand tracking, 1-4 DOF tasks. Online metrics (same six panels as fig 3) with one box per
-DOF count. The latency figure and the vision diagnostics of these runs are notebooks/human_vision/.
+Figure 6: 3D human hand tracking on the BRAND triangulation set-up (2026-10-06, config human_bare, analysis in
+human_tuning.py): pipeline-stage latency, bit rate per run, a 2-DOF hand-control example. make_figure_0930 (key
+6_0930) is the earlier 2026-09-30 version: 1-4 DOF tasks on the hand3d node, online metrics per DOF count. The latency
+figure and the vision diagnostics of the 09-30 runs are notebooks/human_vision/.
 
 Runs, DOF labels and paths are under `human:` in config.yaml. `plot_dofs` (or generate_figs.py --dofs 1 2) picks
 which DOF tasks are drawn; analyze() always processes every run, so switching needs no rerun.
@@ -20,7 +22,7 @@ from functools import partial
 from pynwb import NWBFile, NWBHDF5IO, TimeSeries
 
 from metrics import run_metrics
-from utils import COLORS, DATA, ONLINE_METRICS, ROOT, compose, metric_panel
+from utils import COLORS, DATA, ONLINE_METRICS, ROOT, boxes, compose, metric_panel
 
 DOF_COLORS = {1: '#2a78d6', 2: '#1baf7a', 3: '#eb6834', 4: '#b455e0'}
 TITLE = '3D Human Hand Tracking'
@@ -214,13 +216,92 @@ def panel_trace(ax, d, n):
 PANELS = {'title': panel_title, **{k: (lambda ax, d, k=k: panel_metric(ax, d, k)) for k in m}}
 
 
-def make_figure(cfg):
+def make_figure_0930(cfg):
+    """The 2026-09-30 version (1-4 DOF tasks, hand3d node): online metrics per DOF count. Key 6_0930."""
     n = len(plot_dofs(cfg))
     panels = PANELS | {f'trace_{d}': partial(panel_trace, n=d) for d in plot_dofs(cfg)}
     first = plot_dofs(cfg)[0]
-    return compose(layout_for(cfg), panels, load(cfg), (6 * n + 2, 17), 'fig6_human',
-                   labels={f'trace_{first}': 'A', 'success_rate': 'B'}, stats_bars=cfg['stats_bars'][6],
+    return compose(layout_for(cfg), panels, load(cfg), (6 * n + 2, 17), 'human_hand_control_0930',
+                   labels={f'trace_{first}': 'A', 'success_rate': 'B'}, stats_bars=cfg['stats_bars']['human_0930'],
                    height_ratios=[0.12, 1.3, 1, 1])
+
+
+# ---------------------------------------------------------------- fig 6: BRAND triangulation set-up (2026-10-06)
+# stage label (human_tuning) -> (tick label, colour): improv stages blue, BRAND stages green, end-to-end grey
+STAGES = {'Camera': ('Camera', '#0a11c4'), 'Store get': ('Store\nget', '#2f5fd0'), 'Inference': ('Infer-\nence', '#519bc6'),
+          'Triangulation': ('Triangu-\nlation', '#2ccded'), 'Joint angles': ('Joint\nangles', '#8fd6ea'),
+          'Sender': ('Sender', '#b9e3f0'), 'Vision end-to-end': ('Vision\ntotal', '#757272'),
+          'vision -> vision_dofs': ('BRAND\nDOF node', '#1baf7a'), 'vision_dofs -> cursor': ('BRAND\nmux', '#7fd3a8')}
+RUN_COLOR = '#2a78d6'
+DOF_SHOWN = {'index': 'Index', 'mrs': 'Middle, ring and pinky'}
+
+
+def load_bare(cfg):
+    import human_tuning as ht
+    runs = cfg['human_bare']['figure_runs']
+    lat = pd.read_csv(ht.OUT / 'latency.csv')
+    tr = pd.read_csv(ht.OUT / 'trials.csv')
+    return {'runs': runs, 'settings': cfg['human_bare']['runs'], 'lat': lat[lat['run_id'].isin(runs)],
+            'trials': tr[tr['run_id'].isin(runs)], 'ex': dict(np.load(ht.OUT / 'example.npz')),
+            'ex_trials': pd.read_csv(ht.OUT / 'example_trials.csv')}
+
+
+def panel_stage_latency(ax, d):
+    """One box per pipeline stage: each run's mean (like fig 2B), camera -> cursor."""
+    means = d['lat'].groupby(['stage', 'run_id'])['latency_ms'].mean()
+    boxes(ax, [(STAGES[k][0], means[k]) for k in STAGES], [c for _, c in STAGES.values()], ylabel='Latency (ms)', unit='run')
+    plt.setp(ax.get_xticklabels(), rotation=0, ha='center')
+    ax.axhline(1000 / 60, color=COLORS['budget'], ls='--')
+    ax.text(0.99, 1000 / 60, '60 FPS budget', transform=ax.get_yaxis_transform(), ha='right', va='bottom',
+            color=COLORS['budget'], fontweight='bold')
+    ax.set_ylim(0, None)
+
+
+def panel_bitrate(ax, d):
+    """Bit rate of every successful trial, one box per run (its smoothing setting)."""
+    short = lambda txt: txt.replace('One-Euro + glide', '1€ + glide').replace('2 hands, ', '2 hands\n')
+    groups = [(f"Run {int(r[-3:])}\n" + short(d['settings'][r]['setting']).replace(', ', '\n'),
+               d['trials'].loc[d['trials']['run_id'] == r, 'bitrate_bits_per_s']) for r in d['runs']]
+    boxes(ax, groups, [RUN_COLOR] * len(groups), ylabel='Bit rate (bits/s)', unit='trial')
+    plt.setp(ax.get_xticklabels(), rotation=0, ha='center')
+    ax.set_ylim(0, None)
+
+
+def panel_trace_2dof(ax, d):
+    """2-DOF hand control: cursor (blue) through the target boxes (grey hit / red miss), one stacked row per DOF."""
+    ex, trials = d['ex'], d['ex_trials']
+    t0 = trials['start_time'].iloc[0]
+    names = [DOF_SHOWN.get(str(x), str(x)) for x in ex['dofs']]
+    for j, name in enumerate(names):
+        off = j * STEP
+        for _, row in trials.iterrows():
+            r = row['target_radius']
+            ax.add_patch(plt.Rectangle((row['start_time'] - t0, off + row[f'target_{j}'] - r), row['stop_time'] - row['start_time'],
+                                       2 * r, facecolor=COLORS['target_hit'] if row['success'] else COLORS['target_miss'],
+                                       edgecolor='#6f6f6f', ls='--', lw=0.6 * plt.rcParams['axes.linewidth'], alpha=0.7, zorder=1))
+        ax.plot(ex['t'] - t0, off + ex['x'][:, j], color=RUN_COLOR, zorder=3)
+        ax.text(0.005, off + 1.04, name, transform=ax.get_yaxis_transform(), ha='left', va='bottom', color=RUN_COLOR,
+                fontweight='bold')
+    ax.set_yticks([v for j in range(len(names)) for v in (j * STEP, j * STEP + 1)], [l for _ in names for l in ('0', '1')])
+    ax.set_ylim(-0.15, (len(names) - 1) * STEP + 1.3)
+    ax.set_xlim(0, trials['stop_time'].iloc[-1] - t0)
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Position (a.u.)')
+
+
+def make_figure(cfg):
+    """Fig 6: the BRAND triangulation set-up (config human_bare): stage latency, bit rate per run, a 2-DOF example."""
+    layout = [['lat', 'lat', 'lat'], ['bit', 'bit', 'trace']]
+    panels = {'lat': panel_stage_latency, 'bit': panel_bitrate, 'trace': panel_trace_2dof}
+
+    def place(fig, axd):
+        # the trace fills the space right of the bit-rate boxes
+        b, t, l = axd['bit'].get_position(), axd['trace'].get_position(), axd['lat'].get_position()
+        x0 = b.x1 + 0.07
+        axd['trace'].set_position([x0, t.y0, l.x0 + max(l.width, 0.85) - x0, t.height * 0.92])   # clear A's tick labels
+
+    return compose(layout, panels, load_bare(cfg), (18, 10), 'figS3_human_2dof_hand_control', labels={'lat': 'A', 'bit': 'B', 'trace': 'C'},
+                   stats_bars=cfg['stats_bars']['S3'], post_layout=place)
 
 
 # ---------------------------------------------------------------- the RDB's full target sets

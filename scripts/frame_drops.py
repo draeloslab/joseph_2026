@@ -117,8 +117,8 @@ def make_figure(runs, events, id_col, name, title):
         ax.set_title(title, loc='left')
         ax.text(1.01, 1.0, 'dropped:\npipeline | camera', transform=ax.transAxes, va='bottom', fontweight='bold',
                 fontsize=plt.rcParams['ytick.labelsize'])
-        handles = [ax.scatter([], [], s=40, color=c, label=f'{k} drop') for k, c in KIND_COLOR.items()]
-        handles.append(plt.Rectangle((0, 0), 1, 1, facecolor='none', edgecolor='#888888', hatch='///', label='pipeline offline'))
+        handles = [ax.scatter([], [], s=40, color=c, label=f'{k.capitalize()} drop') for k, c in KIND_COLOR.items()]
+        handles.append(plt.Rectangle((0, 0), 1, 1, facecolor='none', edgecolor='#888888', hatch='///', label='Pipeline offline'))
         ax.legend(handles=handles, loc='lower right', bbox_to_anchor=(1.0, 1.0), ncol=3, borderaxespad=0.3)
         ax.grid(axis='x', color='#ececec')
         for kind in ('pipeline', 'camera'):
@@ -130,4 +130,4 @@ def make_figure(runs, events, id_col, name, title):
             describe(ax, 'pipeline offline (s, per run)', runs['offline_s'], unit='run', n_runs=len(runs),
                      runs_with_offline=int((runs['offline_s'] > 0).sum()), total_offline_s=runs['offline_s'].sum())
 
-    return compose([['drops']], {'drops': panel}, None, (16, 2.5 + 0.42 * len(ids)), name, labels={}, stats_bars=False)
+    return compose([['drops']], {'drops': panel}, None, (16, 1.8 + 0.28 * len(ids)), name, labels={}, stats_bars=False)

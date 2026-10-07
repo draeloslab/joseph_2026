@@ -106,8 +106,12 @@ def _boxes_and_trace(ax, trials, series, ylabel, legend=True):
     ax.set_ylim(-0.1, 1.1)
     ax.set_ylabel(ylabel)
     ax.set_xlabel('Time (s)')
-    if legend:
-        ax.legend(loc='lower left', bbox_to_anchor=(0, 1.01, 1, 0.15), mode='expand', ncol=len(series), borderaxespad=0)
+    if legend == 'lower right':        # stacked, inside the axes, on a white backing so it stays legible over the target boxes
+        ax.legend(loc='lower right', ncol=1, frameon=True, facecolor='white', edgecolor='none', framealpha=0.9,
+                  borderaxespad=0.3, handlelength=1.6)
+    elif legend:
+        ax.legend(loc='lower left', bbox_to_anchor=(0, 1.01), ncol=len(series), borderaxespad=0, columnspacing=1.2,
+                  handlelength=1.6)
 
 
 def _save_example(cfg, key, streams, name):
@@ -115,7 +119,13 @@ def _save_example(cfg, key, streams, name):
     ex = cfg['war_machine'][key]
     r = wm.run(cfg, ex['run'])
     tr = wm.in_mode(r)
-    tr = utils.trial_window(tr, ex['first_trial'], ex['n_trials'], tr['success'].to_numpy())
+    if ex.get('select') == 'shortest_success':     # the n consecutive successful trials that took the least time in total
+        n, ok = ex['n_trials'], tr['success'].to_numpy()
+        starts = [i for i in range(len(tr) - n + 1) if ok[i:i + n].all()]
+        first = min(starts, key=lambda i: tr['stop_time'].iloc[i + n - 1] - tr['start_time'].iloc[i])
+        tr = tr.iloc[first:first + n]
+    else:
+        tr = utils.trial_window(tr, ex['first_trial'], ex['n_trials'], tr['success'].to_numpy())
     t0, t1 = tr['start_time'].iloc[0], tr['stop_time'].iloc[-1]
     out = {'run': ex['run']}
     for s in streams:
@@ -165,50 +175,47 @@ def analyze_fig2(cfg):
 
 
 def make_fig2(cfg):
-    """config war_machine.fig2_merge_fps: true pools every run into one histogram with only the 60 fps budget."""
+    """config war_machine.fig3_merge_fps: true pools every run into one histogram with only the 60 fps budget."""
     runs = pd.read_csv(OUT / 'latency_runs.csv')
     frames = np.load(OUT / 'latency_e2e_frames.npz')
-    merge = cfg['war_machine'].get('fig2_merge_fps', False)
+    merge = cfg['war_machine'].get('fig3_merge_fps', False)
     fps = [60] if merge else sorted(runs['fps'].unique())
-    groups = [(f"All runs (n={len(runs)}", runs['run_id'], 60)] if merge else \
-             [(f'{f} fps runs (n={(runs["fps"] == f).sum()}', runs.loc[runs['fps'] == f, 'run_id'], f) for f in fps]
+    groups = [('All runs', runs['run_id'], 60)] if merge else \
+             [(f'{f} fps runs', runs.loc[runs['fps'] == f, 'run_id'], f) for f in fps]
+    budgets = [60] if merge else fps
 
     def hist(ax, d):
-        for label, ids, f in groups:
+        # 60 fps first, so the grey 30 fps histogram is drawn on top; the legend only names the two colours
+        for z, (label, ids, f) in enumerate(sorted(groups, key=lambda g: -g[2])):
             e = np.concatenate([frames[i] for i in ids])
-            budget = 1000 / f
-            ax.hist(e, bins=np.arange(12, 36.05, 0.1), color=FPS_COLOR[f], alpha=0.6,
-                    label=f'{label}, {len(e):,} frames), median {np.median(e):.1f} ms')
-            ax.axvline(budget, color=FPS_COLOR[f] if not merge else COLORS['budget'], ls='--', lw=2,
-                       label=f'{f} FPS budget ({budget:.1f} ms): {np.mean(e > budget):.1%} over')
-            utils.describe(ax, label.split(' (')[0], e, unit='frame', n_runs=len(ids),
-                           n_sessions=ids.str[:10].nunique(), pct_over_budget=100 * np.mean(e > budget),
-                           budget_ms=budget)
-        ax.set_xlim(12, 36)
-        ax.set_xlabel('End-to-end latency (ms)'); ax.set_ylabel('Frames'); ax.set_title('End-to-end latency distribution')
+            ax.hist(e, bins=np.arange(10, 20.05, 0.1), color=FPS_COLOR[f], alpha=0.75, zorder=2 + z,
+                    label=label.replace(' runs', ''))
+            utils.describe(ax, label, e, unit='frame', n_runs=len(ids), n_sessions=ids.str[:10].nunique(),
+                           pct_over_budget=100 * np.mean(e > 1000 / f), budget_ms=1000 / f, median_ms=np.median(e))
+        ax.set_xlim(10, 20); ax.set_xticks([10, 15, 20])
+        ax.set_xlabel('End-to-end latency (ms)'); ax.set_ylabel('Frames')
+        utils.power_offset(ax, 3)             # diagonal 10^3 at the top of the y axis
         ax.legend(loc='upper right')
 
     def stages(ax, d):
         utils.boxes(ax, [(label, runs[k]) for k, label in STAGE_LABELS], [COLORS[k] for k, _ in STAGE_LABELS],
-                    ylabel='Processing time (ms)', title=f'Per stage: run means (n={len(runs)})', unit='run')
-        for f in fps:
-            ax.axhline(1000 / f, color=COLORS['budget'], ls='--' if f == 30 or merge else ':')
-            ax.text(0.99, 1000 / f, f'{f} FPS budget ({1000 / f:.1f} ms)', transform=ax.get_yaxis_transform(),
-                    ha='right', va='bottom', color=COLORS['budget'], fontweight='bold')
+                    ylabel='Processing time (ms)', unit='run')
+        for f in budgets:                      # frame budgets (1,000 / fps): 33.3 ms at 30 fps, 16.7 ms at 60 fps
+            ax.axhline(1000 / f, color=COLORS['budget'], ls='--')
         ax.set_ylim(0, max(1000 / min(fps), runs['e2e'].max()) * 1.12)
 
-    name = 'fig2_war_machine_merged' if merge else 'fig2_war_machine'
+    name = 'fig3_latency_war_machine_merged' if merge else 'fig3_latency_war_machine'
     fig = compose([['hist', 'stages']], {'hist': hist, 'stages': stages}, {}, (18, 6.5), name,
-                  labels={'hist': 'A', 'stages': 'B'}, stats_bars=cfg['stats_bars'][2])
+                  labels={'hist': 'A', 'stages': 'B'}, stats_bars=cfg['stats_bars'][3])
     make_fig2_drops(cfg)
     return fig
 
 
 def make_fig2_drops(cfg):
-    """figures/fig2_war_machine_dropped_frames: where in each run frames were dropped (data/war_machine/dropped_frames_*.csv)."""
+    """figures/fig3_latency_war_machine_dropped_frames: where in each run frames were dropped (data/war_machine/dropped_frames_*.csv)."""
     runs, ev = pd.read_csv(OUT / 'dropped_frames_runs.csv'), pd.read_csv(OUT / 'dropped_frames_events.csv')
     tot = lambda k: 100 * runs[f'{k}_dropped'].sum() / runs[f'{k}_frames'].sum()
-    return frame_drops.make_figure(runs, ev, 'run_id', 'fig2_war_machine_dropped_frames',
+    return frame_drops.make_figure(runs, ev, 'run_id', 'fig3_latency_war_machine_dropped_frames',
                                    f'War Machine dropped frames (all runs: pipeline {tot("pipeline"):.2f}%, camera {tot("camera"):.2f}%)')
 
 
@@ -239,19 +246,25 @@ def make_fig3(cfg):
               [k for k in m[:3] for _ in range(2)], [k for k in m[3:] for _ in range(2)]]
 
     def trace(ax, d):
-        _boxes_and_trace(ax, ex_trials, [(ex['manip_t'], ex['manip'], 'Bend sensor (drove the cursor)', COLORS['bend'], 2.5, '-'),
-                                         (ex['vision_t'], ex['vision'], 'Freebie (recorded alongside)', COLORS['freebie'], 2, '--')],
-                         'Index position (a.u.)')
-        ax.set_title('Hand control example', pad=34)
+        _boxes_and_trace(ax, ex_trials, [(ex['manip_t'], ex['manip'], 'Bend sensor (drove cursor)', COLORS['bend'], 2.5, '-'),
+                                         (ex['vision_t'], ex['vision'], 'Freebie (recorded)', COLORS['freebie'], 2, '--')],
+                         'Index position (a.u.)', legend='lower right')
 
     def corrp(ax, d):
-        utils.boxes(ax, [('Freebie vs\nbend sensor', corr['r'].abs())], [COLORS['freebie']], ylabel='|Pearson r| (per run)',
-                    n_labels=[f'{len(corr)} runs'], unit='run')
+        utils.boxes(ax, [('Freebie vs\nbend sensor', corr['r'].abs())], [COLORS['freebie']], ylabel='|Pearson r| (per run)', unit='run')
         ax.set_ylim(0, 1.05)
 
+    def widths(fig, axd):
+        # A = 1.5x and B = 0.75x the width of one C panel, B right after A with the same gap as between the C panels
+        c, c2 = axd[m[0]].get_position(), axd[m[1]].get_position()
+        a, b = axd['trace'].get_position(), axd['corr'].get_position()
+        gap = c2.x0 - c.x1
+        axd['trace'].set_position([a.x0, a.y0, 1.5 * c.width, a.height])
+        axd['corr'].set_position([a.x0 + 1.5 * c.width + gap * 1.6, b.y0, 0.75 * c.width, b.height])
+
     panels = {'trace': trace, 'corr': corrp, **_metric_panels(cfg, runs, trials, ['bend', 'freebie'])}
-    return compose(layout, panels, {}, (16, 13), 'fig3_war_machine', labels={'trace': 'A', 'corr': 'B', 'success_rate': 'C'},
-                   stats_bars=cfg['stats_bars'][3], height_ratios=[0.6, 0.6, 1, 1])
+    return compose(layout, panels, {}, (12, 9.8), 'fig4_hand_control', labels={'trace': 'A', 'corr': 'B', 'success_rate': 'C'},
+                   stats_bars=cfg['stats_bars'][4], height_ratios=[0.6, 0.6, 1, 1], post_layout=widths)
 
 
 # ================================================================= fig 4: Kalman filter
@@ -370,24 +383,22 @@ def make_fig4(cfg):
     layout = [['freebie'] * 3 + ['bend'] * 3,
               [k for k in m[:3] for _ in range(2)], [k for k in m[3:] for _ in range(2)],
               ['nmse_valid'] * 2 + ['correlation_valid'] * 2 + ['.'] * 2]
-    title = {'freebie': 'Freebie KF', 'bend': 'KF trained on bend sensor'}
-    ylab = {'nmse_valid': 'Normalized MSE\n(MSE / target variance)', 'correlation_valid': 'Correlation (r)'}
+    ylab = {'nmse_valid': 'Normalized MSE', 'correlation_valid': 'Correlation (r)'}
 
     def decode(ax, d, key):
         ex, ex_trials = _load_example(f'fig4_example_{key}')
         _boxes_and_trace(ax, ex_trials, [(ex['cursor_t'], ex['cursor'], 'Decoded position', COLORS[key], 2.5, '-')],
-                         'Decoded position (a.u.)', legend=False)
-        ax.set_title(title[key])
+                         'Position (a.u.)', legend=False)
 
     def offline(ax, d, metric):
         by = {s: g.set_index('run_id')[metric] for s, g in off.groupby('signal')}
         utils.boxes(ax, [(LABEL[s], by[s]) for s in ('bend', 'freebie')], [COLORS['bend'], COLORS['freebie']],
                     ylabel=ylab[metric], title='Offline KF, index', test='paired', log=metric == 'nmse_valid',
-                    n_labels=[f'{len(by[s])} runs' for s in ('bend', 'freebie')], unit='run')
+                    unit='run')
 
     panels = {'freebie': partial(decode, key='freebie'), 'bend': partial(decode, key='bend'),
               **_metric_panels(cfg, runs, trials, ['kf_bend', 'kf_freebie']),
               **{k: partial(offline, metric=k) for k in ('nmse_valid', 'correlation_valid')}}
-    return compose(layout, panels, {}, (16, 19), 'fig4_war_machine',
+    return compose(layout, panels, {}, (12, 10.6), 'fig5_kalman_filter',
                    labels={'freebie': 'A', 'bend': 'B', 'success_rate': 'C', 'nmse_valid': 'D'},
-                   stats_bars=cfg['stats_bars'][4], height_ratios=[0.7, 1, 1, 1])
+                   stats_bars=cfg['stats_bars'][5], height_ratios=[0.95, 1, 1, 1])

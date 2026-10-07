@@ -1,5 +1,7 @@
 """Shared config, style, plotting helpers, significance tests and the master-folder loader."""
+import io
 import pickle
+import re
 import string
 import sys
 from functools import cache
@@ -9,6 +11,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import yaml
+from matplotlib.ticker import AutoLocator, FuncFormatter, MaxNLocator, ScalarFormatter
 from scipy.stats import mannwhitneyu, wilcoxon
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +24,8 @@ STATS = []          # every test run while drawing the current figure, written n
 DESCR = []          # descriptives (n, mean, sd, ...) of every group drawn in the current figure, written next to it
 SHOW_BARS = True    # whether significance() draws its bracket/asterisks (set per-figure by compose)
 BOX_IN = 1.5        # axes width per box (inches): every boxplot panel is resized to n_boxes * BOX_IN after layout
+STYLE = {}          # config `style`: print sizes (pt) at the journal width, scaled per figure by compose()
+MAX_TICKS = 4       # automatic tick locators get at most this many ticks
 
 
 # ---------------------------------------------------------------- config + style
@@ -30,24 +35,129 @@ def load_config(path=ROOT / 'config.yaml'):
 
 
 def apply_style(cfg):
+    """Fonts, colours and line widths from config `style`. Sizes there are what the printed figure shows at
+    `figure_width_mm` (180 mm = journal double column); compose() rescales them per figure (print_rc)."""
     s = cfg['style']
-    plt.rcParams.update({
-        'font.family': 'sans-serif', 'font.sans-serif': s['font_family'],
-        'font.size': s['font_size'], 'axes.titlesize': s['title_size'],
-        'axes.titleweight': 'bold', 'axes.labelsize': s['label_size'],
-        'axes.labelweight': 'bold', 'xtick.labelsize': s['tick_size'],
-        'ytick.labelsize': s['tick_size'], 'legend.fontsize': s['legend_size'],
-        'legend.frameon': False, 'lines.linewidth': s['line_width'],
-        'axes.linewidth': s['axes_line_width'], 'xtick.major.width': s['axes_line_width'],
-        'ytick.major.width': s['axes_line_width'], 'lines.markersize': np.sqrt(s['marker_size']),
-        'axes.spines.top': False, 'axes.spines.right': False,
-        'savefig.dpi': s['dpi'], 'svg.fonttype': 'none', 'pdf.fonttype': 42,
-    })
+    STYLE.clear()
+    STYLE.update(s)
+    plt.rcParams.update({'font.family': 'sans-serif', 'font.sans-serif': s['font_family'], 'axes.titleweight': 'bold',
+                         'axes.labelweight': 'bold', 'legend.frameon': False, 'axes.spines.top': False,
+                         'axes.spines.right': False, 'svg.fonttype': 'none', 'pdf.fonttype': 42})
+    plt.rcParams.update(print_rc(1.0))
     COLORS.update(s['palette'])
     COLORS['_panel_label_size'] = s['panel_label_size']
 
 
-def compose(layout, panels, data, size, name, labels=None, stats_bars=True, height_ratios=None, width_ratios=None):
+def print_rc(scale):
+    """rcParams for a figure drawn in its own (design) inches that will be printed `scale` times smaller: every size
+    is the config print size / scale, so text and lines come out at the config sizes once the figure is shrunk."""
+    s, k = STYLE, 1 / scale
+    lw, alw = s['line_width'] * k, s['axes_line_width'] * k
+    return {'font.size': s['font_size'] * k, 'axes.titlesize': s['title_size'] * k, 'axes.labelsize': s['label_size'] * k,
+            'xtick.labelsize': s['tick_size'] * k, 'ytick.labelsize': s['tick_size'] * k,
+            'legend.fontsize': s['legend_size'] * k, 'lines.linewidth': lw, 'axes.linewidth': alw,
+            'xtick.major.width': alw, 'ytick.major.width': alw, 'xtick.minor.width': alw * 0.6, 'ytick.minor.width': alw * 0.6,
+            'xtick.major.size': 3.5 * k, 'ytick.major.size': 3.5 * k, 'xtick.minor.size': 2 * k, 'ytick.minor.size': 2 * k,
+            'xtick.major.pad': 2.5 * k, 'ytick.major.pad': 2.5 * k, 'axes.labelpad': 3 * k, 'axes.titlepad': 4 * k,
+            'lines.markersize': np.sqrt(s['marker_size']) * k, 'grid.linewidth': 0.5 * k, 'patch.linewidth': alw * 0.8,
+            'boxplot.boxprops.linewidth': alw, 'boxplot.whiskerprops.linewidth': alw, 'boxplot.capprops.linewidth': alw,
+            'boxplot.medianprops.linewidth': lw, 'hatch.linewidth': 0.5 * k, 'savefig.dpi': s['dpi']}
+
+
+def marker_area(scale=1.0):
+    """Scatter marker area (pt^2, design units) for the config marker size, times `scale` in diameter."""
+    return (plt.rcParams['lines.markersize'] * scale) ** 2
+
+
+def _tidy(fig):
+    """Figure-wide conventions: no subplot titles (except axes flagged ax.keep_title: camera names, frame times) and
+    at most MAX_TICKS ticks on every automatically ticked linear axis."""
+    for ax in fig.axes:
+        if not getattr(ax, 'keep_title', False):
+            ax.set_title('')
+        for axis, scale in ((ax.xaxis, ax.get_xscale()), (ax.yaxis, ax.get_yscale())):
+            if scale == 'linear' and isinstance(axis.get_major_locator(), AutoLocator):
+                axis.set_major_locator(MaxNLocator(nbins=MAX_TICKS - 1, steps=[1, 1.5, 2, 2.5, 3, 4, 5, 10]))
+            # thousands separated by commas (1,000), unless the axis carries its own power-of-ten offset
+            if scale == 'linear' and not getattr(axis, 'keep_formatter', False) and isinstance(axis.get_major_formatter(), ScalarFormatter):
+                locs = axis.get_majorticklocs()
+                if len(locs) and np.nanmax(np.abs(locs)) >= 1000:
+                    axis.set_major_formatter(FuncFormatter(lambda v, _: f'{v:,.0f}' if abs(v - round(v)) < 1e-9 else f'{v:,.6g}'))
+
+
+def power_offset(ax, power=3):
+    """Counts axis shown as multiples of 10^power: the factor sits diagonally at the top of the y axis (not in the label)."""
+    fmt = ScalarFormatter(useMathText=True)
+    fmt.set_powerlimits((power, power))
+    ax.yaxis.set_major_formatter(fmt)
+    ax.yaxis.keep_formatter = True
+    ax.yaxis.get_offset_text().set_rotation(45)
+    ax.yaxis.get_offset_text().set_ha('left')
+    ax.yaxis.get_offset_text().set_va('bottom')
+
+
+def place_letters(fig, axd, labels):
+    """Panel letters: the top of the letter flush with the top of its panel, its left edge flush with the left edge of the
+    panel (axis label included). Panels whose axes top lies on one row share that row's highest panel top."""
+    fig.canvas.draw()
+    r = fig.canvas.get_renderer()
+    W, H = fig.bbox.width, fig.bbox.height
+    boxes_ = {k: (axd[k].get_tightbbox(r, for_layout_only=True), axd[k].get_window_extent(r)) for k in labels}
+    for k, (bb, ab) in boxes_.items():
+        row = [o[0].y1 for o in boxes_.values() if abs(o[1].y1 - ab.y1) < 0.05 * H]
+        t = fig.text(bb.x0 / W, max(row) / H, labels[k], ha='left', va='top', fontweight='bold',
+                     fontsize=STYLE['panel_label_size'] * plt.rcParams['font.size'] / STYLE['font_size'])
+        lab = axd[k].yaxis.label
+        if lab.get_text():                        # a y label as tall as its panel would run into the letter: slide it down
+            lb, tb = lab.get_window_extent(r), t.get_window_extent(r)
+            if lb.x0 < tb.x1 and lb.y1 > tb.y0:
+                shift = (lb.y1 - tb.y0 + 0.3 * tb.height) / axd[k].get_window_extent(r).height
+                lab.set_y(lab.get_position()[1] - shift)
+    return boxes_
+
+
+def audit_text(fig, name):
+    """Standards check on every piece of text in the figure: sentence case (first letter capital, no other title-cased
+    words, no full stop), thousands separators, a unit separated from its number by one space. Prints what it finds."""
+    allowed = {'Freebie', 'Pearson', 'Euclidean', 'Monkey', 'Run', 'Camera', 'BRAND', 'Hz', 'Label', 'Index', 'MRS', 'PIP', 'DIP', 'MCP'}
+    texts = []
+    for ax in fig.axes:
+        texts += [ax.get_xlabel(), ax.get_ylabel(), ax.get_title()]
+        texts += [t.get_text() for t in ax.get_xticklabels() + ax.get_yticklabels() if not t.get_text().lstrip('-−').replace('.', '').replace(',', '').isdigit()]
+        texts += [t.get_text() for t in ax.texts]
+        if ax.get_legend():
+            texts += [t.get_text() for t in ax.get_legend().get_texts()]
+    bad = []
+    for t in dict.fromkeys(x for x in texts if x.strip()):
+        for line in t.split('\n'):
+            words = [w for w in re.findall(r"[A-Za-z][A-Za-z\-']+", line) if len(w) > 3 and not w.isupper() and w not in allowed]
+            caps = [w for w in words[1:] if w[0].isupper()]
+            first = re.search(r'[A-Za-z]', line)
+            numeric = line.strip()[:1].isdigit() or line.strip().startswith('$')
+            if (first and first.group().islower() and line is t.split('\n')[0] and not numeric) or line.rstrip().endswith('.') or caps or re.search(r'\d(ms|s|px|Hz|mm|fps|%)\b', line) and not re.search(r'\d%', line):
+                bad.append(line)
+    for line in dict.fromkeys(bad):
+        print(f'  [text standard] {name}: {line!r}')
+
+
+def _save(fig, name):
+    """SVG scaled to exactly figure_width_mm wide (vector, every size shrinks together) and a PNG of the same
+    print size at the config dpi."""
+    width_in = STYLE['figure_width_mm'] / 25.4
+    buf = io.StringIO()
+    fig.savefig(buf, format='svg', bbox_inches='tight')
+    svg = buf.getvalue()
+    m = re.search(r'<svg[^>]*?width="([\d.]+)pt" height="([\d.]+)pt"', svg)
+    w_pt, h_pt = float(m.group(1)), float(m.group(2))
+    w_mm = STYLE['figure_width_mm']
+    svg = svg.replace(f'width="{m.group(1)}pt" height="{m.group(2)}pt"',
+                      f'width="{w_mm:.2f}mm" height="{w_mm * h_pt / w_pt:.2f}mm"', 1)
+    (FIGS / f'{name}.svg').write_text(svg)
+    fig.savefig(FIGS / f'{name}.png', bbox_inches='tight', dpi=STYLE['dpi'] * width_in / (w_pt / 72))
+
+
+def compose(layout, panels, data, size, name, labels=None, stats_bars=True, height_ratios=None, width_ratios=None,
+            post_layout=None):
     """
     Build one figure from a subplot_mosaic layout. `panels` maps mosaic key -> panel
     function(ax, data). `labels` maps key -> panel letter (default: A, B, ... in `panels`
@@ -55,8 +165,17 @@ def compose(layout, panels, data, size, name, labels=None, stats_bars=True, heig
     bigger or smaller than others (equal by default), pass `height_ratios`/`width_ratios`
     (one number per row/column of `layout`). `stats_bars` (from config.yaml's `stats_bars`)
     controls whether significance() draws its bracket/asterisks on this figure; the
-    underlying tests are always run and always written to the stats csv.
+    underlying tests are always run and always written to the stats csv. `post_layout(fig, axd)` runs after the
+    layout is frozen and the box panels are sized, to place panels by hand.
+
+    `size` is the design size (inches); the saved figure is shrunk to config style.figure_width_mm, and text / lines
+    are drawn at the config print sizes divided by that shrink (print_rc).
     """
+    with plt.rc_context(print_rc(STYLE['figure_width_mm'] / 25.4 / size[0])):
+        return _compose(layout, panels, data, size, name, labels, stats_bars, height_ratios, width_ratios, post_layout)
+
+
+def _compose(layout, panels, data, size, name, labels, stats_bars, height_ratios, width_ratios, post_layout):
     global SHOW_BARS
     SHOW_BARS = stats_bars
     fig = plt.figure(figsize=size, layout='constrained')
@@ -68,6 +187,7 @@ def compose(layout, panels, data, size, name, labels=None, stats_bars=True, heig
         fn(axd[key], data)
         for row in STATS[n_before:] + DESCR[d_before:]:
             row['panel'] = key
+    _tidy(fig)
     # identical box widths: freeze the constrained layout, then give every boxplot panel (tagged with
     # ax.n_boxes by boxes() / the panel) a width of n_boxes * BOX_IN, keeping its left edge and height
     fig.canvas.draw()
@@ -76,13 +196,13 @@ def compose(layout, panels, data, size, name, labels=None, stats_bars=True, heig
         if getattr(ax, 'n_boxes', None):
             x0, y0, _, h = ax.get_position().bounds
             ax.set_position([x0, y0, ax.n_boxes * BOX_IN / fig.get_figwidth(), h])
+    if post_layout:
+        post_layout(fig, axd)
     labels = dict(zip(panels, string.ascii_uppercase)) if labels is None else labels   # {} = no panel letters
-    for key, letter in labels.items():
-        axd[key].text(-0.02, 1.02, letter, transform=axd[key].transAxes, ha='right', va='bottom',
-                      fontsize=COLORS['_panel_label_size'], fontweight='bold')
+    place_letters(fig, axd, labels)
+    audit_text(fig, name)
     FIGS.mkdir(exist_ok=True)
-    for ext in ('svg', 'png'):
-        fig.savefig(FIGS / f'{name}.{ext}', bbox_inches='tight')
+    _save(fig, name)
     print(f'saved {(FIGS / name).relative_to(ROOT)}.svg/.png')
     for rows, suffix in ((STATS, 'stats'), (DESCR, 'descriptives')):
         out = FIGS / f'{name}_{suffix}.csv'
@@ -111,11 +231,12 @@ def describe(ax, label, values, unit=None, **extra):
 
 
 # the paper's figures, in order, for figures/all_stats.csv (name -> config key)
-ALL_STATS_FIGS = {'fig1_validation': '1', 'fig1_validation_heldout': '1_heldout', 'fig2_war_machine': '2',
-                  'fig2_war_machine_merged': '2 (merged fps)', 'fig2_war_machine_dropped_frames': '2 (dropped frames)',
-                  'fig2_supplement_latency': '2_supplement', 'fig2_supplement_dropped_frames': '2_supplement (dropped frames)',
-                  'fig3_war_machine': '3', 'fig3_supplement_hand_control': '3_supplement', 'fig4_war_machine': '4',
-                  'fig4_supplement_kf_decode': '4_supplement', 'fig6_human': '6'}
+ALL_STATS_FIGS = {'fig2_validation_heldout': '2', 'fig3_latency_war_machine': '3', 'fig3_latency_war_machine_merged': '3 (merged fps)',
+                  'fig3_latency_war_machine_dropped_frames': '3 (dropped frames)', 'fig4_hand_control': '4',
+                  'fig5_kalman_filter': '5', 'figS1_latency_old_pipeline': 'S1',
+                  'figS1_latency_old_pipeline_dropped_frames': 'S1 (dropped frames)', 'figS2_hand_control_old_system': 'S2',
+                  'figS3_human_2dof_hand_control': 'S3', 'figS4_kalman_filter_old_system': 'S4',
+                  'validation_all_frames': 'validation (all frames)', 'human_hand_control_0930': 'human 09-30'}
 
 
 def write_all_stats():
@@ -148,7 +269,7 @@ def write_all_stats():
 def boxes(ax, groups, colors, ylabel=None, title=None, test=None, log=False, test_groups=None, n_labels=None,
           unit=None, describe_groups=True):
     """
-    groups: list of (label, values). Box + jittered points, n in the tick label (or n_labels: one string per group).
+    groups: list of (label, values). Box + jittered points; n_labels: an optional second tick-label line per group.
     test: None, 'independent' (Mann-Whitney U) or 'paired' (Wilcoxon; values are Series indexed by session).
     test_groups: the (label, values) to test instead of the plotted ones (e.g. run means while every trial is drawn).
     unit: what one value is (trial, run, session, frame), for the descriptives csv; describe_groups=False when the
@@ -159,19 +280,19 @@ def boxes(ax, groups, colors, ylabel=None, title=None, test=None, log=False, tes
     """
     data = [np.asarray(v, dtype=float) for _, v in groups]
     data = [d[np.isfinite(d) & (d > 0 if log else True)] for d in data]
-    n_labels = n_labels or [f'(n={len(d)})' for d in data]
-    bp = ax.boxplot(data, tick_labels=[f'{l}\n{n}' for (l, _), n in zip(groups, n_labels)],
-                    widths=0.55, patch_artist=True, showfliers=False,
-                    medianprops={'color': '#111111', 'lw': 2})
+    ticks = [f'{l}\n{n}' for (l, _), n in zip(groups, n_labels)] if n_labels else [l for l, _ in groups]
+    bp = ax.boxplot(data, tick_labels=ticks, widths=0.55, patch_artist=True, showfliers=False,
+                    medianprops={'color': '#111111'})
     ax.n_boxes = len(groups)
     if len(groups) > 3:      # more than ~3 tick labels crowd/overlap at a normal panel width
         plt.setp(ax.get_xticklabels(), rotation=20, ha='right', rotation_mode='anchor')
     rng = np.random.default_rng(0)
     for i, (patch, d, c) in enumerate(zip(bp['boxes'], data, colors)):
         patch.set(facecolor=c, alpha=0.3, edgecolor='#444444')
-        few = len(d) <= 50          # one point per run/session: draw them big enough to see
-        ax.scatter(rng.normal(i + 1, 0.06, len(d)), d, s=30 if few else 6, color=c, alpha=0.8 if few else 0.35, zorder=3,
-                   linewidths=0.5 if few else 0, edgecolors='white')
+        few = len(d) <= 50          # one point per run/session: bigger, opaque
+        ax.scatter(rng.normal(i + 1, 0.06, len(d)), d, s=marker_area(1.6 if few else 0.9), color=c,
+                   alpha=0.85 if few else 0.4, zorder=3, linewidths=0.4 * plt.rcParams['axes.linewidth'] if few else 0,
+                   edgecolors='white')
     if log:
         ax.set_yscale('log')
     ax.grid(axis='y', color='#ececec')
@@ -255,13 +376,13 @@ def significance(ax, groups, paired=False, shown=None, tested_on=None):
         if len(v):
             tops.append(np.max(v))
     top_s = min(max(to_space(t) for t in tops), hi_s)   # fliers may lie above the axis
-    step_s = 0.07 * (hi_s - lo_s)
+    step_s = 0.11 * (hi_s - lo_s)
     level = 0
     for r in sorted((r for r in rows if r['p_holm'] < 0.05), key=lambda r: (r['j'] - r['i'], r['i'])):
         y_s = top_s + step_s * (level + 0.6)
         y, y_tick = from_space(y_s), from_space(y_s - step_s * 0.25)
         ax.plot([r['i'] + 1, r['i'] + 1, r['j'] + 1, r['j'] + 1], [y_tick, y, y, y_tick],
-                color='#111111', lw=1.5, clip_on=False)
+                color='#111111', lw=plt.rcParams['axes.linewidth'], clip_on=False)
         ax.text((r['i'] + r['j']) / 2 + 1, y, stars(r['p_holm']), ha='center', va='bottom',
                 fontsize=plt.rcParams['font.size'] * 1.2, fontweight='bold')
         level += 1
@@ -284,7 +405,8 @@ def target_trace(ax, trials, dof_col, series, ylabel):
     ax.set_ylabel(ylabel)
     ax.set_xlabel('Time (s)')
     # above the axes, not inside it -- inside overlaps the traces/target boxes once the panel is short
-    ax.legend(loc='lower left', bbox_to_anchor=(0, 1.01, 1, 0.15), mode='expand', ncol=len(series), borderaxespad=0)
+    ax.legend(loc='lower left', bbox_to_anchor=(0, 1.01), ncol=min(len(series), 2), borderaxespad=0, columnspacing=1.2,
+              handlelength=1.6)
 
 
 # ---------------------------------------------------------------- the master folder
@@ -338,7 +460,7 @@ def trial_window(trials, first_trial, n_trials, keep):
 
 
 ONLINE_METRICS = {'success_rate': 'Success rate', 'bitrate_bits_per_s': 'Bit rate (bits/s)',
-                  'targets_per_s': 'Targets / s', 'time_to_target_s': 'Time to target (s)',
+                  'targets_per_s': 'Targets per second', 'time_to_target_s': 'Time to target (s)',
                   'orbiting_time_s': 'Orbiting time (s)', 'path_efficiency': 'Path efficiency'}
 
 # every online metric's column in run_trial_metrics.csv. bitrate_bits_per_s and the ttt/orbit/path
@@ -392,7 +514,7 @@ def metric_panel(ax, groups, metric, trials=None, stats_trials=None, show_trials
     of one session/run-average point per run, for the metrics that have a per-trial column
     (ONLINE_TRIAL_COLS); groups without a per-trial column always use per-run means.
     stats_trials: the same trial table, to instead test on one mean per run (no pseudo-replication) and label
-    each box with its n runs and n trials; the box shows every trial (show_trials) or the run means.
+    the box shows every trial (show_trials) or the run means.
     Every group's n sessions / runs / trials and its run-level and trial-level summaries go to the descriptives csv.
     """
     col = ONLINE_TRIAL_COLS.get(metric)
@@ -402,7 +524,7 @@ def metric_panel(ax, groups, metric, trials=None, stats_trials=None, show_trials
     per = [table[table['run_id'].isin(g['run_id'])][col] if table is not None and col is not None else pd.Series(dtype=float)
            for _, g, _ in groups]
     if stats_trials is not None:
-        n_labels = [f'{np.isfinite(g[metric]).sum()} runs\n{np.isfinite(t).sum()} trials' for (_, g, _), t in zip(groups, per)]
+        n_labels = None            # n runs / trials go to the descriptives csv and the legend, not the axis
         shown = [(label, t) for (label, *_), t in zip(groups, per)] if show_trials else runs
         ax.tested_on = 'run means'
         boxes(ax, shown, colors, ylabel=ONLINE_METRICS[metric], test='independent', test_groups=runs, n_labels=n_labels,
