@@ -4,7 +4,7 @@ from functools import partial
 import matplotlib.pyplot as plt
 import numpy as np
 
-from utils import COLORS, DATA, DOF_NAMES, compose, marker_area
+from utils import COLORS, DATA, DOF_NAMES, STYLE, compose, marker_area
 
 # 21-keypoint hand: wrist, then 4 (thumb 5 incl. wrist) points per finger in DOF_NAMES order
 FINGERS = dict(zip(DOF_NAMES, [[0, 1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16], [17, 18, 19, 20]]))
@@ -18,6 +18,8 @@ LAYOUT = [['rt_0', 'rt_1', 'stim_0', 'stim_1'],
 SIZE = (16, 9)      # same scale as the other figures (16-18 in wide), so the shared fonts / line widths read the same
 WIDTH_RATIOS = [1, 1, 1.4, 1.4]
 HEIGHT_RATIOS = [1, 0.8]
+LINE_MM = 68.0     # width of each line plot's axes at print size (the image pairs above them measure 67.5 and 68.5 mm)
+TRACE_LW = 5      # both traces drawn at the same line thickness (no point markers, which made the left one look heavier)
 
 
 # ---------------------------------------------------------------- analysis
@@ -67,7 +69,7 @@ def panel_image(ax, d, kind, i):
 
 def panel_rt_trace(ax, d):
     for k, name in enumerate(('x', 'y')):
-        ax.plot(d['rt_t'], d['rt_indextip'][:, k], color=COLORS[f'fes_{name}'], marker='.', label=f"{ {'x': 'Horizontal', 'y': 'Vertical'}[name]} (px)")
+        ax.plot(d['rt_t'], d['rt_indextip'][:, k], color=COLORS[f'fes_{name}'], lw=TRACE_LW, label=f"{ {'x': 'Horizontal', 'y': 'Vertical'}[name]} (px)")
     ax.invert_yaxis()
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Index fingertip (px)')
@@ -78,7 +80,7 @@ def panel_rt_trace(ax, d):
 def panel_stim_trace(ax, d):
     for a, b in d['stim_windows']:
         ax.axvspan(a, b, color=COLORS['stim_window'], alpha=0.8, lw=0)     # stimulation periods (conditions listed in the legend)
-    ax.plot(d['stim_t'], d['stim_x'] - np.nanmedian(d['stim_x']), color=COLORS['fingers']['middle'])   # = the middle knuckle on the images
+    ax.plot(d['stim_t'], d['stim_x'] - np.nanmedian(d['stim_x']), color=COLORS['fingers']['middle'], lw=TRACE_LW)   # = the middle knuckle on the images
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Middle knuckle x (mm)')
 
@@ -90,5 +92,12 @@ LABELS = {'rt_0': 'A', 'stim_0': 'B'}
 
 
 def make_figure(cfg):
+    def align(fig, axd):
+        # both line plots the same size, LINE_MM wide at print size (images are re-cut by hand later); left edges stay under the images
+        w = LINE_MM / STYLE['figure_width_mm']
+        for kind in ('rt', 'stim'):
+            a, t = axd[f'{kind}_0'].get_position(), axd[f'{kind}_trace'].get_position()
+            axd[f'{kind}_trace'].set_position([a.x0, t.y0, w, t.height])
+
     return compose(LAYOUT, PANELS, load(), SIZE, 'fig6_fes', labels=LABELS, stats_bars=cfg['stats_bars'][6],
-                   height_ratios=HEIGHT_RATIOS, width_ratios=WIDTH_RATIOS)
+                   height_ratios=HEIGHT_RATIOS, width_ratios=WIDTH_RATIOS, post_layout=align)

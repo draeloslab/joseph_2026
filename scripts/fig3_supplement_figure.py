@@ -86,8 +86,8 @@ def panel_corr(ax, d):
 
 
 def panel_metric(ax, d, metric):
-    # box + dots: every trial (config online_metrics.all_trials) or the run means; tested on run means either way
-    metric_panel(ax, d['groups'], metric, stats_trials=d['trials'], show_trials=d['show_trials'])
+    # box + dots: every trial (config online_metrics.all_trials) or the run means; descriptives and tests on one mean per session
+    metric_panel(ax, d['groups'], metric, stats_trials=d['trials'], show_trials=d['show_trials'], by_session=True)
 
 
 PANELS = {'trace_1': partial(panel_trace, dof=1), 'trace_3': partial(panel_trace, dof=3), 'corr': panel_corr,

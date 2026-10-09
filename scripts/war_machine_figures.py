@@ -22,6 +22,8 @@ from metrics import run_metrics
 from utils import COLORS, DATA, ONLINE_METRICS, compose
 
 OUT = DATA / 'war_machine'
+C_GAP = 0.75                   # fig 4: gap between the C panels relative to the default
+C_SHRINK = 0.8                 # fig 4: width of the online-metric (C) panels relative to the default 2 boxes x BOX_IN
 KF_CACHE = DATA / 'cache' / 'war_machine_offline_kf.csv'
 INDEX_DOF = 1                  # kf.py's DOF_NAMES[1] = index; War Machine only drives index
 LABEL = {'bend': 'Bend sensor', 'freebie': 'Freebie'}
@@ -153,12 +155,44 @@ def analyze_fig2(cfg):
         frames[rid] = lat['e2e']
     pd.DataFrame(rows).to_csv(OUT / 'latency_runs.csv', index=False)
     np.savez(OUT / 'latency_e2e_frames.npz', **frames)
+    frame_drops(cfg)
+
+
+def frame_drops(cfg):
+    """data/war_machine/latency_drops.csv: per run and improv session, the camera frames inside the run's task window,
+    the frames the camera failed to deliver (a gap > 1.5 frame periods between camera starts) and the frames the
+    processor skipped (gaps in its frame numbers), with the number of bursts and the longest one (frames)."""
+    pred, rows = Path(cfg['war_machine']['predictions']).expanduser(), []
+    for rid in wm.run_ids(cfg):
+        r = wm.run(cfg, rid)
+        w, fps = r['window_unix'], r['latency']['fps']
+        for s in sorted((pred / r['day'].replace('-', '')).iterdir()):
+            if not ((s / 'true_e2e_cam2.npy').exists() and (s / 'TISstarts_front_left.npy').exists()):
+                continue
+            L = lambda n: np.load(s / f'{n}.npy')
+            start = L('TISstarts_front_left')[1:]               # first frame dropped (GPU warm-up), as in war_machine._vision_logs
+            start = start[(start >= w[0]) & (start <= w[1])]
+            if len(start) < 2:
+                continue
+            dt = np.diff(start)
+            late = dt > 1.5 * np.median(dt)
+            missing = np.maximum(np.round(dt / np.median(dt)) - 1, 0)[late]
+            t, n = L('proc_timestamps_cam2')[1:], L('proc_frame_nums_cam2')[1:]
+            gaps = np.diff(n[(t >= w[0]) & (t <= w[1])])
+            skipped = gaps[gaps > 1] - 1
+            rows.append({'run_id': rid, 'session': s.name, 'fps': fps, 'camera_frames': len(start),
+                         'camera_missing': int(missing.sum()), 'camera_bursts': int(late.sum()),
+                         'camera_longest_burst': int(missing.max()) if len(missing) else 0,
+                         'processor_skipped': int(skipped.sum()), 'processor_bursts': len(skipped),
+                         'processor_longest_burst': int(skipped.max()) if len(skipped) else 0})
+    pd.DataFrame(rows).to_csv(OUT / 'latency_drops.csv', index=False)
 
 
 def make_fig2(cfg):
     """config war_machine.fig3_merge_fps: true pools every run into one histogram with only the 60 fps budget."""
     runs = pd.read_csv(OUT / 'latency_runs.csv')
     frames = np.load(OUT / 'latency_e2e_frames.npz')
+    drops = pd.read_csv(OUT / 'latency_drops.csv')
     merge = cfg['war_machine'].get('fig3_merge_fps', False)
     fps = [60] if merge else sorted(runs['fps'].unique())
     groups = [('All runs', runs['run_id'], 60)] if merge else \
@@ -171,8 +205,15 @@ def make_fig2(cfg):
             e = np.concatenate([frames[i] for i in ids])
             ax.hist(e, bins=np.arange(15, 20.025, 0.05), color=FPS_COLOR[f], alpha=0.75, zorder=2 + z,
                     label=label.replace(' runs', ''))
+            dr = drops[drops['run_id'].isin(ids)]
             utils.describe(ax, label, e, unit='frame', n_runs=len(ids), n_sessions=ids.str[:10].nunique(),
-                           pct_over_budget=100 * np.mean(e > 1000 / f), budget_ms=1000 / f, median_ms=np.median(e))
+                           pct_over_budget=100 * np.mean(e > 1000 / f), budget_ms=1000 / f, median_ms=np.median(e),
+                           camera_frames=dr['camera_frames'].sum(), processor_skipped=dr['processor_skipped'].sum(),
+                           pct_processor_skipped=100 * dr['processor_skipped'].sum() / dr['camera_frames'].sum(),
+                           processor_bursts=dr['processor_bursts'].sum(), processor_longest_burst=dr['processor_longest_burst'].max(),
+                           camera_missing=dr['camera_missing'].sum(),
+                           pct_camera_missing=100 * dr['camera_missing'].sum() / dr['camera_frames'].sum(),
+                           camera_bursts=dr['camera_bursts'].sum(), camera_longest_burst=dr['camera_longest_burst'].max())
         ax.set_xlim(15, 20)
         ax.set_xticks(np.arange(15, 20.1, 1)); ax.set_xticks(np.arange(15, 20.1, 0.25), minor=True)
         ax.set_xlabel('End-to-end latency (ms)'); ax.set_ylabel('Frames')
@@ -215,7 +256,7 @@ def make_fig3(cfg):
     corr = pd.read_csv(OUT / 'sensor_corr.csv')
     ex, ex_trials = _load_example('fig3_example')
     m = list(ONLINE_METRICS)
-    layout = [['trace'] * 4 + ['corr'] * 2, ['trace'] * 4 + ['corr'] * 2,
+    layout = [['trace'] * 3 + ['corr'] * 3,       # same arrangement / row heights as fig 5
               [k for k in m[:3] for _ in range(2)], [k for k in m[3:] for _ in range(2)]]
 
     def trace(ax, d):
@@ -228,16 +269,27 @@ def make_fig3(cfg):
         ax.set_ylim(0, 1.05)
 
     def widths(fig, axd):
-        # A = 1.5x and B = 0.75x the width of one C panel, B right after A with the same gap as between the C panels
-        c, c2 = axd[m[0]].get_position(), axd[m[1]].get_position()
-        a, b = axd['trace'].get_position(), axd['corr'].get_position()
-        gap = c2.x0 - c.x1
-        axd['trace'].set_position([a.x0, a.y0, 1.5 * c.width, a.height])
-        axd['corr'].set_position([a.x0 + 1.5 * c.width + gap * 1.6, b.y0, 0.75 * c.width, b.height])
+        # C's panels narrower (C_SHRINK) and closer together (C_GAP x the default gap); B then widened to end where C ends, so A + B span C's width.
+        # B's x limits are set so its box is as wide as one box in C.
+        W = fig.get_figwidth()
+        c = [[axd[k] for k in m[:3]], [axd[k] for k in m[3:]]]
+        x0, gap = c[0][0].get_position().x0, (c[0][1].get_position().x0 - c[0][0].get_position().x1) * C_GAP
+        w = c[0][0].get_position().width * C_SHRINK
+        for row in c:
+            for i, ax in enumerate(row):
+                p = ax.get_position()
+                ax.set_position([x0 + i * (w + gap), p.y0, w, p.height])
+        right = x0 + 2 * (w + gap) + w
+        b = axd['corr'].get_position()
+        axd['corr'].set_position([b.x0, b.y0, right - b.x0, b.height])
+        lo, hi = c[0][0].get_xlim()
+        half = (right - b.x0) * W / (w * W / (hi - lo)) / 2          # B width / inches per x unit in C / 2
+        axd['corr'].set_xlim(1 - half, 1 + half)
 
     panels = {'trace': trace, 'corr': corrp, **_metric_panels(cfg, runs, trials, ['bend', 'freebie'])}
-    return compose(layout, panels, {}, (12, 9.8), 'fig4_hand_control', labels={'trace': 'A', 'corr': 'B', 'success_rate': 'C'},
-                   stats_bars=cfg['stats_bars'][4], height_ratios=[0.6, 0.6, 1, 1], post_layout=widths)
+    return compose(layout, panels, {}, (12, 10.6 * 2.95 / 3.95), 'fig4_hand_control',
+                   labels={'trace': 'A', 'corr': 'B', 'success_rate': 'C'},
+                   stats_bars=cfg['stats_bars'][4], height_ratios=[0.95, 1, 1], post_layout=widths)
 
 
 # ================================================================= fig 4: Kalman filter

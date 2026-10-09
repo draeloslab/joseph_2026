@@ -22,18 +22,17 @@ SIGNAL_COLOR = {'Bend sensor': 'bend', 'Freebie index angle': 'index_angle', 'Fr
 
 OFFLINE_METRICS = {'nmse_valid': 'Normalized MSE', 'correlation_valid': 'Correlation (r)'}
 
-# A = Freebie KF, B = bend KF (index + MRS stacked in one axis each), C = online metrics, D = offline KF (index, MRS)
+# A = Freebie KF, B = bend KF (index + MRS stacked in one axis each), D = offline KF (index nmse | r over MRS nmse | r),
+# C = online metrics. A / B take C's first column, the D panels its second and third (spread() lines them up).
 m = list(ONLINE_METRICS)
-_D = [f'{mt}_{dof}' for mt in OFFLINE_METRICS for dof in ('Index', 'MRS')]
-# one row of traces, the six online metrics over two rows, the offline KF (index | MRS) over two rows: at the
-# 180 mm print width a row holds ~9 boxes, so the old 3-row layout (11 boxes a row) overlapped
-LAYOUT = [['freebie'] * 5 + ['bend'] * 5,
-          [m[0]] * 3 + [m[1]] * 3 + [m[2]] * 3 + ['.'],
-          [m[3]] * 3 + [m[4]] * 3 + [m[5]] * 3 + ['.'],
-          [_D[0]] * 3 + [_D[2]] * 3 + [_D[1]] * 2 + [_D[3]] * 2]     # index: nmse, r | MRS: nmse, r
+_D = [f'{mt}_{dof}' for mt in OFFLINE_METRICS for dof in ('Index', 'MRS')]     # nmse_Index, nmse_MRS, corr_Index, corr_MRS
+LAYOUT = [['freebie'] * 3 + [_D[0]] * 3 + [_D[2]] * 3,
+          ['bend'] * 3 + [_D[1]] * 3 + [_D[3]] * 3,
+          [k for k in m[:3] for _ in range(3)],
+          [k for k in m[3:] for _ in range(3)]]
 WIDTH_RATIOS = None
-SIZE = (21, 16.5)
-HEIGHT_RATIOS = [1.3, 1, 1, 1]
+SIZE = (21, 19)
+HEIGHT_RATIOS = [1.1, 1.1, 1, 1]
 TRACE_DOFS = [(1, 'Index', 'index_angle', 1.45), (3, 'MRS', 'mrs_x', 0.0)]   # (dof, label, freebie colour, y offset)
 
 
@@ -117,17 +116,40 @@ def panel_offline(ax, d, dof, metric):
 
 
 def panel_metric(ax, d, metric):
-    # box + dots: every trial (config online_metrics.all_trials) or the run means; tested on run means either way
-    metric_panel(ax, d['groups'], metric, stats_trials=d['trials'], show_trials=d['show_trials'])
+    # box + dots: every trial (config online_metrics.all_trials) or the run means; descriptives and tests on one mean per session
+    metric_panel(ax, d['groups'], metric, stats_trials=d['trials'], show_trials=d['show_trials'], by_session=True)
 
 
 PANELS = {**{k: partial(panel_decode, key=k) for k in DECODERS},
           **{f'{m}_{dof}': partial(panel_offline, dof=dof, metric=m) for m in OFFLINE_METRICS for dof in ('Index', 'MRS')},
           **{m: partial(panel_metric, metric=m) for m in ONLINE_METRICS}}
-LABELS = {'freebie': 'A', 'bend': 'B', 'success_rate': 'C', 'nmse_valid_Index': 'D'}
+LABELS = {'freebie': 'A', 'bend': 'B', 'nmse_valid_Index': 'D', 'success_rate': 'C'}
+
+
+ROW_GAP_IN = 1.5       # gap between neighbouring panels (inches, design size): room for the y label and ticks
+
+
+def spread(fig, axd):
+    """C's three columns span the figure with equal gaps; A / B sit over C's first column, and the offline-KF panels (D)
+    over its second and third at the same box width as C (the 2-box MRS panels start at their column's left edge)."""
+    pos = lambda k: axd[k].get_position()
+    left, right = min(pos(k).x0 for k in m), max(pos(k).x1 for k in m)
+    gap = ROW_GAP_IN / fig.get_figwidth()
+    unit = (right - left - 2 * gap) / 9
+    col = [left + i * (3 * unit + gap) for i in range(3)]
+    for row in (m[:3], m[3:]):
+        for k, x in zip(row, col):
+            p = pos(k)
+            axd[k].set_position([x, p.y0, 3 * unit, p.height])
+    for k in ('freebie', 'bend'):
+        p = pos(k)
+        axd[k].set_position([col[0], p.y0, 3 * unit, p.height])
+    for k, x in zip(_D, (col[1], col[1], col[2], col[2])):     # nmse_Index, nmse_MRS | corr_Index, corr_MRS
+        p = pos(k)
+        axd[k].set_position([x, p.y0, axd[k].n_boxes * unit, p.height])
 
 
 def make_figure(cfg):
     return compose(LAYOUT, PANELS, load(cfg), SIZE, 'figS4_kalman_filter_old_system', labels=LABELS,
                    stats_bars=cfg['stats_bars']['S4'], height_ratios=HEIGHT_RATIOS,
-                   width_ratios=WIDTH_RATIOS)
+                   width_ratios=WIDTH_RATIOS, post_layout=spread)

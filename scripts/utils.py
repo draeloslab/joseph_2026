@@ -257,7 +257,7 @@ def write_all_stats():
     out = pd.concat(parts, ignore_index=True)
     lvl = lambda sfx: [f'{k}_{sfx}' for k in ('mean', 'sd', 'sem', 'median', 'q1', 'q3', 'min', 'max')]
     first = ['figure', 'figure_file', 'panel', 'row_type', 'measure', 'group', 'unit', 'n', 'n_sessions', 'n_runs', 'n_trials',
-             'n_frames', 'mean', 'sd', 'sem', 'median', 'q1', 'q3', 'min', 'max', *lvl('run'), *lvl('trial'), 'trial_value',
+             'n_frames', 'mean', 'sd', 'sem', 'median', 'q1', 'q3', 'min', 'max', *lvl('run'), *lvl('trial'), 'trial_value', 'pct_over_budget', 'pct_processor_skipped', 'pct_camera_missing',
              'group_a', 'group_b', 'test', 'tested_on', 'n_a', 'n_b', 'mean_a', 'mean_b', 'median_a', 'median_b',
              'statistic', 'p', 'p_holm', 'significant']
     cols = [c for c in first if c in out] + [c for c in out if c not in first]
@@ -507,7 +507,15 @@ def _n_sessions(g):
     return ids.str[:10].nunique() if len(ids) and ids.str.match(r'\d{4}-\d{2}-\d{2}_').all() else np.nan
 
 
-def metric_panel(ax, groups, metric, trials=None, stats_trials=None, show_trials=True):
+def session_values(g, metric):
+    """One value per session for a group of runs: a run's sub-recordings (its comma-joined session ids) are one
+    session, named by the first; runs that share a session are averaged. Trials and runs of a session are repeated
+    measures, so this is the independent unit for the descriptives and tests of the old-system figures."""
+    key = g['sessions'].astype(str).str.split(',').str[0]
+    return g.groupby(key)[metric].mean()
+
+
+def metric_panel(ax, groups, metric, trials=None, stats_trials=None, show_trials=True, by_session=False):
     """
     groups: list of (label, runs df, color), each df a subset of run_metrics.csv (see split_groups).
     One box per group. `trials`: run_trial_metrics.csv, to plot every trial's value (all dots) instead
@@ -515,6 +523,8 @@ def metric_panel(ax, groups, metric, trials=None, stats_trials=None, show_trials
     (ONLINE_TRIAL_COLS); groups without a per-trial column always use per-run means.
     stats_trials: the same trial table, to instead test on one mean per run (no pseudo-replication) and label
     the box shows every trial (show_trials) or the run means.
+    by_session (needs stats_trials): descriptives and tests on one value per session (session_values) instead of
+    one per run; the plotted dots are unchanged.
     Every group's n sessions / runs / trials and its run-level and trial-level summaries go to the descriptives csv.
     """
     col = ONLINE_TRIAL_COLS.get(metric)
@@ -526,10 +536,11 @@ def metric_panel(ax, groups, metric, trials=None, stats_trials=None, show_trials
     if stats_trials is not None:
         n_labels = None            # n runs / trials go to the descriptives csv and the legend, not the axis
         shown = [(label, t) for (label, *_), t in zip(groups, per)] if show_trials else runs
-        ax.tested_on = 'run means'
-        boxes(ax, shown, colors, ylabel=ONLINE_METRICS[metric], test='independent', test_groups=runs, n_labels=n_labels,
+        tested = [(label, session_values(g, metric)) for label, g, _ in groups] if by_session else runs
+        ax.tested_on = 'session means' if by_session else 'run means'
+        boxes(ax, shown, colors, ylabel=ONLINE_METRICS[metric], test='independent', test_groups=tested, n_labels=n_labels,
               describe_groups=False)
-        plotted = 'trial' if show_trials else 'run'
+        plotted = 'session' if by_session else 'trial' if show_trials else 'run'
     elif trials is not None and col is not None:
         ax.tested_on = 'trials'
         boxes(ax, [(label, t) for (label, *_), t in zip(groups, per)], colors, ylabel=ONLINE_METRICS[metric],
@@ -541,7 +552,9 @@ def metric_panel(ax, groups, metric, trials=None, stats_trials=None, show_trials
         plotted = 'run'
     for (label, g, _), t in zip(groups, per):
         r, tr = _summary(g[metric]), _summary(t)
-        describe(ax, label, t if plotted == 'trial' else g[metric], unit=plotted, n_sessions=_n_sessions(g),
+        sess = session_values(g, metric) if plotted == 'session' else None
+        describe(ax, label, sess if plotted == 'session' else t if plotted == 'trial' else g[metric], unit=plotted,
+                 n_sessions=len(sess.dropna()) if plotted == 'session' else _n_sessions(g),
                  trial_value='running rate up to the trial' if col and col.endswith('_running') else 'per trial',
                  n_runs=r.get('n', 0), n_trials=tr.get('n', 0),
                  **{f'{k}_run': v for k, v in r.items() if k != 'n'}, **{f'{k}_trial': v for k, v in tr.items() if k != 'n'})
