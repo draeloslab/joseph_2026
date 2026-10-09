@@ -106,6 +106,19 @@ human_dof:
     Run-009: {n_dof: 4, session: 20261007-0102}
   task_image: assets/human_task_screenshot.png      # the task screen (cropped), fig S3C
 
+# ---- fig 6 (FES), panel A: the live free-behaviour run 2026-09-25 13:09, what the live processor stored ----
+# MediaPipe (GPU, num_hands per camera = 2, min detection confidence 0.1, likelihood gate off = -1), triangulate=False: 2D only.
+# 7 camera slots were wired; slots 2 (front_left) and 4 (back_left) delivered no frames. Steps after the mp4s end
+# (video_frames) are left out, as in the figure. Analysis only (scripts/fes_figure.analyze): the figure's own panel data
+# is still exported by improv/experiments/FES (tracking_3d_walkthrough.ipynb -> data/fig5_fes.npz).
+fes:
+  live_run: ~/predictions/20260925/20260925-1309
+  cameras: {0: top, 1: bottom_left, 3: front_right, 5: bottom_right, 6: back_right}   # slot -> TIS camera name
+  video_frames: 2550           # length of each camera_video/2026-09-25/130900 mp4 (all five the same)
+  figure_camera: 3             # the view drawn in fig 6A
+  figure_block: right          # MediaPipe handedness block drawn in fig 6A (the notebook's main_hand = 0)
+  detection_labels: data/fig6_live_detection_labels.csv   # what each stored detection is, labelled by eye (fes_figure.analyze)
+
 # ---- figs 3-5 (War Machine, BRAND rig): <master>/war_machine.pkl, built by `python scripts/war_machine.py` ----
 war_machine:
   server: "/run/user/1000/gvfs/smb-share:server=cnpl-drmanhattan.engin.umich.edu,share=share/Data/Monkeys/War Machine"

@@ -1,10 +1,12 @@
 """Figure 5: Freebie driving FES (real-time tracking session + stimulation session)."""
 from functools import partial
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
-from utils import COLORS, DATA, DOF_NAMES, STYLE, compose, marker_area
+from utils import COLORS, DATA, DOF_NAMES, FIGS, ROOT, STYLE, compose, marker_area
 
 # 21-keypoint hand: wrist, then 4 (thumb 5 incl. wrist) points per finger in DOF_NAMES order
 FINGERS = dict(zip(DOF_NAMES, [[0, 1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16], [17, 18, 19, 20]]))
@@ -23,8 +25,56 @@ TRACE_LW = 5      # both traces drawn at the same line thickness (no point marke
 
 
 # ---------------------------------------------------------------- analysis
+INDEX_TIP = {'right': 8, 'left': 29}   # index fingertip in the stored 42 keypoints: MediaPipe 'Right' block 0-20, 'Left' 21-41
+
+
 def analyze(cfg):
-    pass   # data/fig5_fes.npz is exported by the FES tracking/stim notebooks (improv/experiments/FES/analysis)
+    """Panel A numbers from the live 13:09 run (stored 2D only): how often each camera, on its own, had the index
+    fingertip, and how often at least one / two cameras had it at the same step. data/fig5_fes.npz itself is exported
+    by the FES tracking/stim notebooks (improv/experiments/FES/analysis).
+
+    'Detected' = the live processor stored a hand at that step. MediaPipe returns all 21 keypoints with every hand (no
+    per-keypoint likelihood; the live likelihood gate was off), so the fingertip is there whenever a hand is. Its
+    'right' / 'left' block is MediaPipe's per-image handedness guess, so both blocks are pooled. Not every stored hand
+    is the monkey's: data/fig6_live_detection_labels.csv labels each stretch of a camera's detections (consecutive
+    steps, hand moving < 60 px per step) from contact sheets of the video with the stored skeleton drawn on:
+    reaching hand (the one on the toy), other hand (the monkey's second hand, resting on the neck plate), glove,
+    background or face (phantom hands, incl. ones left on the backlight after the hand moved on), uncertain.
+    Rows: all detections | monkey (either of its hands) | reaching hand only."""
+    c = cfg['fes']
+    run = Path(c['live_run']).expanduser()
+    P = np.load(run / 'batch3d_points_2d.npy')                # (steps, 7 slots, 42, x/y/score)
+    ts = np.load(run / 'batch3d_timestamps.npy')             # when each step had pulled its frames
+    cams = {int(k): v for k, v in c['cameras'].items()}
+    # a step used, per camera, the newest frame that camera's reader had sent; keep steps inside every camera's mp4
+    frame = {s: np.searchsorted(np.load(run / f'TISstarts_{n}.npy') + np.load(run / f'TISlatencies_{n}.npy'), ts) - 1
+             for s, n in cams.items()}
+    keep = np.all([(f >= 0) & (f < c['video_frames']) for f in frame.values()], 0)
+    lab = pd.read_csv(ROOT / c['detection_labels'])
+    det = {s: np.zeros((len(ts), 2), bool) for s in cams}                 # any stored hand, per MediaPipe block
+    for s in cams:
+        for b, k in enumerate(INDEX_TIP.values()):
+            det[s][:, b] = np.isfinite(P[:, s, k, 0])
+    kinds = {'all detections': None, 'monkey': {'reaching hand', 'other hand (resting)'}, 'reaching hand': {'reaching hand'}}
+    rows = []
+    for kind, ok in kinds.items():
+        seen = np.zeros((len(ts), len(cams)), bool)
+        for j, s in enumerate(cams):
+            if ok is None:
+                seen[:, j] = det[s].any(1)
+                continue
+            for r in lab[(lab.camera == s) & lab.label.isin(ok)].itertuples():
+                b = list(INDEX_TIP).index(r.mediapipe_hand)
+                seen[r.first_step:r.last_step + 1, j] |= det[s][r.first_step:r.last_step + 1, b]
+        seen = seen[keep]
+        rows += [dict(group=f'camera {s}, {kind}', mean=100 * seen[:, j].mean()) for j, s in enumerate(cams)]
+        rows += [dict(group=f'at least {n} cameras, {kind}', mean=100 * (seen.sum(1) >= n).mean()) for n in (1, 2)]
+    df = pd.DataFrame(rows).assign(panel='A', measure='index fingertip detected', unit='% of steps', n_frames=int(keep.sum()))
+    df.to_csv(FIGS / 'fig6_fes_descriptives.csv', index=False)
+    shown = lab[(lab.camera == c['figure_camera']) & (lab.mediapipe_hand == c['figure_block'])].groupby('label').n_steps.sum()
+    print(f"fig 6A live run: {keep.sum()} of {len(ts)} steps inside the video ({keep.sum() / (ts[-1] - ts[0]):.1f} steps/s); "
+          f"the trace drawn (camera {c['figure_camera']}, '{c['figure_block']}') is {shown.to_dict()}")
+    print(df.set_index('group')['mean'].round(1).to_string())
 
 
 def load():
