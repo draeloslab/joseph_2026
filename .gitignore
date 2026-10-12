@@ -1,11 +1,7 @@
 figures/
 __pycache__/
 *.log
-data/master/
-notebooks
-data
-data_v2
+notebooks/
 *.ipynb
-*.png
-*.svg
-*.csv
+data/
+assets/

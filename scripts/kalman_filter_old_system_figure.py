@@ -1,23 +1,17 @@
-"""Figure 4 supplement: Kalman filter decoding from EMG, trained on Freebie signals vs bend sensors."""
+"""Figure S4: Kalman filter decoding from EMG on the earlier system, trained on Freebie signals vs bend sensors."""
 from functools import partial
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-import freebie
-from metrics import export_run_metrics
-from utils import (COLORS, DATA, ONLINE_METRICS, boxes, compose, load_master, metric_panel, open_nwb, split_groups,
-                   trial_window, trials_frame)
+from utils import COLORS, DATA, ONLINE_METRICS, boxes, compose, metric_panel, split_groups
 
 DECODERS = {'freebie': 'Freebie KF', 'bend': 'KF trained on bend sensor'}
-# (DOF, signal label, freebie_kf.csv conditions, output); 'bend (same window)' is trained on the
-# same stretch of data as the Freebie KF of that session
-OFFLINE = [('Index', 'Bend sensor', ['bend (same window)'], 'index_pos'),
-           ('Index', 'Freebie index angle', ['index_angle', 'index_angle+mrs_x'], 'index_pos'),
-           ('Index', 'Freebie PIP y', ['pip_y', 'pip_y+mrs_x'], 'index_pos'),
-           ('MRS', 'Bend sensor', ['bend (same window)'], 'ring_pos'),
-           ('MRS', 'Freebie MRS x', ['index_angle+mrs_x'], 'ring_pos')]
+# (DOF, signal) of each offline-KF box (data/offline_kf.csv); the bend-sensor KF of a session is trained on the same
+# stretch of data as its Freebie KFs
+OFFLINE = [('Index', 'Bend sensor'), ('Index', 'Freebie index angle'), ('Index', 'Freebie PIP y'),
+           ('MRS', 'Bend sensor'), ('MRS', 'Freebie MRS x')]
 SIGNAL_COLOR = {'Bend sensor': 'bend', 'Freebie index angle': 'index_angle', 'Freebie PIP y': 'pip_y', 'Freebie MRS x': 'mrs_x'}
 
 OFFLINE_METRICS = {'nmse_valid': 'Normalized MSE', 'correlation_valid': 'Correlation (r)'}
@@ -36,42 +30,12 @@ HEIGHT_RATIOS = [1.1, 1.1, 1, 1]
 TRACE_DOFS = [(1, 'Index', 'index_angle', 1.45), (3, 'MRS', 'mrs_x', 0.0)]   # (dof, label, freebie colour, y offset)
 
 
-# ---------------------------------------------------------------- analysis
-def analyze(cfg):
-    export_run_metrics(cfg)
-
-    kf = freebie.offline_kf_rows(cfg)
-    rows = []
-    for dof, signal, conditions, output in OFFLINE:
-        sel = kf[kf['condition'].isin(conditions) & (kf['output'] == output)]
-        rows.append(sel.assign(dof=dof, signal=signal)[['session_id', 'n_dof', 'dof', 'signal', 'mse_valid',
-                                                        *OFFLINE_METRICS]])
-    pd.concat(rows).to_csv(DATA / 'offline_kf.csv', index=False)
-
-    # example closed-loop trials: the decoder's output on each active DOF against the target windows
-    for key in DECODERS:
-        ex = cfg['examples'][f'{key}_decoder_trace']
-        ds = open_nwb(cfg, ex['run'])
-        dec = ds.dataset.processing['behavior']['decode']
-        t, data = dec.timestamps[:], dec.data[:]
-        dofs = load_master(cfg)['runs'][ex['run']]['dofs']
-        trials = trials_frame(ds.dataset, dofs)
-        feature = int(np.median(trials['DecodeFeature']))             # decoder output columns 0-4 TCFR, 5-9 SBP
-        trials = trial_window(trials, ex['first_trial'], ex['n_trials'], ~trials['blank'] & trials['decoded'])
-        win = (t >= trials['start_time'].iloc[0]) & (t <= trials['stop_time'].iloc[-1])
-        np.savez(DATA / f'fig4_supplement_example_{key}_trace.npz', t=t[win], run=ex['run'],
-                 **{f'decode_{d}': data[win, d + 5 * feature] for d in dofs})
-        trials[['start_time', 'stop_time', 'target_radius', 'success',
-                *[f'target_{d}' for d in dofs]]].to_csv(DATA / f'fig4_supplement_example_{key}_trials.csv', index=False)
-        ds.close()
-
-
 def load(cfg):
     opts = cfg['online_metrics']
     runs = pd.read_csv(DATA / 'run_metrics.csv')
     closed = runs[runs['mode'] == 'closed_loop']
-    return {**{key: (dict(np.load(DATA / f'fig4_supplement_example_{key}_trace.npz')),
-                     pd.read_csv(DATA / f'fig4_supplement_example_{key}_trials.csv')) for key in DECODERS},
+    return {**{key: (dict(np.load(DATA / f'figS4_example_{key}_trace.npz')),
+                     pd.read_csv(DATA / f'figS4_example_{key}_trials.csv')) for key in DECODERS},
             'offline': pd.read_csv(DATA / 'offline_kf.csv'),
             'groups': split_groups(closed, opts['split_feature'], opts['split_dof']),
             'trials': pd.read_csv(DATA / 'run_trial_metrics.csv'), 'show_trials': opts['all_trials']}
@@ -106,7 +70,7 @@ def panel_decode(ax, d, key):
 
 def panel_offline(ax, d, dof, metric):
     off = d['offline'][d['offline']['dof'] == dof]
-    signals = [s for dof_, s, *_ in OFFLINE if dof_ == dof]
+    signals = [s for dof_, s in OFFLINE if dof_ == dof]
     by_signal = {s: g.set_index('session_id')[metric] for s, g in off.groupby('signal')}
     # normalized MSE is a variance ratio: near-zero-variance validation targets in a handful of
     # sessions push it into the hundreds, so it needs a log axis to stay readable

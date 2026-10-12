@@ -1,13 +1,10 @@
-"""Figure 3 supplement: Freebie tracking vs bend sensors during hand control."""
+"""Figure S2: Freebie tracking vs bend sensors during real-time hand control on the earlier system."""
 from functools import partial
 
 import numpy as np
 import pandas as pd
 
-import freebie
-from metrics import export_run_metrics
-from utils import (COLORS, DATA, ONLINE_METRICS, boxes, compose, load_master, metric_panel, open_nwb, split_groups,
-                   target_trace, trial_window, trials_frame)
+from utils import COLORS, DATA, ONLINE_METRICS, boxes, compose, metric_panel, split_groups, target_trace
 
 SIGNALS = {1: [('index_angle', 'Freebie index angle'), ('pip_y', 'Freebie PIP y')], 3: [('mrs_x', 'Freebie MRS x')]}
 
@@ -20,46 +17,14 @@ LAYOUT = [['trace_1'] * 4 + ['corr'] * 3 + ['.'] * 2,
 SIZE = (20, 17)
 HEIGHT_RATIOS = [0.6, 0.6, 1, 1]
 TRACE_T_MAX = 6        # s; panel A only shows the first 6 s of the example trials
-TRACE_PCT = (20, 80)   # example-trace Freebie scaling only (tight so the plateaus land in the target boxes); the KFs keep 1-99
-
-
-# ---------------------------------------------------------------- analysis
-def analyze(cfg):
-    export_run_metrics(cfg)
-    master = load_master(cfg)
-    corr = freebie.correlations(master)
-    corr.dropna(how='all', subset=corr.columns[1:]).to_csv(DATA / 'freebie_bend_corr.csv', index=False)
-
-    # example trace: bend sensor (1 kHz) vs the Freebie signals at their own frame times, on the xPC clock
-    ex = cfg['examples']['hand_control_trace']
-    s = master['sessions'][ex['session']]
-    run = master['runs'][s['run_id']]
-    ds = open_nwb(cfg, s['run_id'])
-    fa = ds.dataset.processing['behavior']['finger_angles']
-    t, bend = fa.timestamps[:], fa.data[:]
-    cam = freebie.xpc_signals(s, t, pct=TRACE_PCT)
-    trials = trials_frame(ds.dataset, run['dofs'])
-    lo, hi = max(c[0][0] for c in cam.values()), min(c[0][-1] for c in cam.values())
-    keep = ~trials['blank'] & trials['success'] & (trials['start_time'] >= lo) & (trials['stop_time'] <= hi)
-    trials = trial_window(trials, ex['first_trial'], ex['n_trials'], keep)
-    t0, t1 = trials['start_time'].iloc[0], trials['stop_time'].iloc[-1]
-    win = (t >= t0) & (t <= t1)
-    out = {'t': t[win], 'session': ex['session'], **{f'bend_{d}': bend[win, d] for d in run['dofs']}}
-    for name, (tc, v) in cam.items():
-        w = (tc >= t0) & (tc <= t1)
-        out[f'{name}_t'], out[name] = tc[w], v[w]
-    np.savez(DATA / 'fig3_supplement_example_trace.npz', **out)
-    trials[['start_time', 'stop_time', 'target_radius', 'success',
-            *[f'target_{d}' for d in run['dofs']]]].to_csv(DATA / 'fig3_supplement_example_trials.csv', index=False)
-    ds.close()
 
 
 def load(cfg):
     opts = cfg['online_metrics']
     runs = pd.read_csv(DATA / 'run_metrics.csv')
     hand = runs[runs['mode'] == 'hand_control']
-    return {'trace': dict(np.load(DATA / 'fig3_supplement_example_trace.npz')),
-            'ex_trials': pd.read_csv(DATA / 'fig3_supplement_example_trials.csv'),
+    return {'trace': dict(np.load(DATA / 'figS2_example_trace.npz')),
+            'ex_trials': pd.read_csv(DATA / 'figS2_example_trials.csv'),
             'corr': pd.read_csv(DATA / 'freebie_bend_corr.csv'),
             'groups': split_groups(hand, opts['split_feature'], opts['split_dof']),
             'trials': pd.read_csv(DATA / 'run_trial_metrics.csv'), 'show_trials': opts['all_trials']}

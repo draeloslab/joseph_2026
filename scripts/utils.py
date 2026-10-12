@@ -1,10 +1,7 @@
-"""Shared config, style, plotting helpers, significance tests and the master-folder loader."""
+"""Shared config, style, plotting helpers and significance tests."""
 import io
-import pickle
 import re
 import string
-import sys
-from functools import cache
 from pathlib import Path
 
 import numpy as np
@@ -232,11 +229,9 @@ def describe(ax, label, values, unit=None, **extra):
 
 # the paper's figures, in order, for figures/all_stats.csv (name -> config key)
 ALL_STATS_FIGS = {'fig2_validation_heldout': '2', 'fig3_latency_war_machine': '3', 'fig3_latency_war_machine_merged': '3 (merged fps)',
-                  'fig4_hand_control': '4',
-                  'fig5_kalman_filter': '5', 'fig6_fes': '6', 'figS1_latency_old_pipeline': 'S1',
-                  'figS2_hand_control_old_system': 'S2',
-                  'figS3_human_hand_control': 'S3', 'figS4_kalman_filter_old_system': 'S4', 'figS5_no_manipulandum': 'S5',
-                  'validation_all_frames': 'validation (all frames)', 'human_hand_control_0930': 'human 09-30'}
+                  'fig4_hand_control': '4', 'fig5_kalman_filter': '5', 'fig6_fes': '6', 'figS1_latency_old_pipeline': 'S1',
+                  'figS2_hand_control_old_system': 'S2', 'figS3_human_hand_control': 'S3',
+                  'figS4_kalman_filter_old_system': 'S4', 'figS5_no_manipulandum': 'S5'}
 
 
 def write_all_stats():
@@ -409,56 +404,6 @@ def target_trace(ax, trials, dof_col, series, ylabel):
               handlelength=1.6)
 
 
-# ---------------------------------------------------------------- the master folder
-@cache
-def _read_master(p):
-    with open(p, 'rb') as f:
-        return pickle.load(f)
-
-
-def master_dir(cfg):
-    p = Path(cfg['master']).expanduser()
-    return p if p.is_absolute() else ROOT / p
-
-
-def load_master(cfg):
-    """<master>/master.pkl, read once per process. Every decision (excluded runs, chosen Freebie signals, clock
-    offsets, ...) was made when the master was built and is stored in it."""
-    return _read_master(str(master_dir(cfg) / 'master.pkl'))
-
-
-def open_nwb_path(cfg, path):
-    """Any NWB file as neuraldecoding reads it (Dataset of type 'nwb'); close with ds.close()."""
-    from omegaconf import OmegaConf
-    sys.path.insert(0, str(Path(cfg['neuraldecoding_path']).expanduser()))
-    from neuraldecoding.dataset import Dataset
-    ds = Dataset(OmegaConf.create({'dataset_type': 'nwb', 'autoload': False, 'save_path': None,
-                                   'dataset_parameters': {'nwb_file': str(path)}}))
-    ds.load_data()
-    return ds
-
-
-def open_nwb(cfg, run_id):
-    """A master run's trimmed NWB as neuraldecoding reads it; close with ds.close()."""
-    return open_nwb_path(cfg, master_dir(cfg) / load_master(cfg)['runs'][run_id]['nwb'])
-
-
-def trials_frame(nwb, dofs):
-    """The run's trials with the target on each active DOF as target_<dof>."""
-    tr = nwb.trials.to_dataframe()
-    for j, d in enumerate(dofs):
-        tr[f'target_{d}'] = [t[j] for t in tr['target']]
-    return tr
-
-
-def trial_window(trials, first_trial, n_trials, keep):
-    """n_trials consecutive trials from first_trial; auto (None) = a third of the way through `keep`."""
-    if first_trial is None:
-        ok = trials.index[keep]
-        first_trial = int(trials.index.get_loc(ok[len(ok) // 3]))
-    return trials.iloc[first_trial:first_trial + n_trials]
-
-
 ONLINE_METRICS = {'success_rate': 'Success rate', 'bitrate_bits_per_s': 'Bit rate (bits/s)',
                   'targets_per_s': 'Targets per second', 'time_to_target_s': 'Time to target (s)',
                   'orbiting_time_s': 'Orbiting time (s)', 'path_efficiency': 'Path efficiency'}
@@ -466,7 +411,7 @@ ONLINE_METRICS = {'success_rate': 'Success rate', 'bitrate_bits_per_s': 'Bit rat
 # every online metric's column in run_trial_metrics.csv. bitrate_bits_per_s and the ttt/orbit/path
 # metrics are real per-trial values; success_rate and targets_per_s have no natural per-trial value (one
 # is a single 0/1, the other only defined over a whole run) so theirs is a running cumulative rate instead
-# (see metrics.run_metrics) -- successes-so-far/trials-so-far, targets-so-far/elapsed-time-so-far.
+# (computed per trial in the analysis) -- successes-so-far/trials-so-far, targets-so-far/elapsed-time-so-far.
 ONLINE_TRIAL_COLS = {'success_rate': 'success_rate_running', 'bitrate_bits_per_s': 'bitrate_bits_per_s',
                      'targets_per_s': 'targets_per_s_running', 'time_to_target_s': 'time_to_target_s',
                      'orbiting_time_s': 'orbiting_time_s', 'path_efficiency': 'path_efficiency'}
@@ -500,7 +445,7 @@ def split_groups(runs, split_feature=False, split_dof=False):
 
 
 def _n_sessions(g):
-    """Recording sessions behind a group of runs: the master's session ids, or the day of a War Machine run id."""
+    """Recording sessions behind a group of runs: its session ids, or the day of a War Machine run id."""
     if 'sessions' in g:
         return len({x for v in g['sessions'] for x in str(v).split(',')})
     ids = g['run_id'].astype(str)

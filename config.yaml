@@ -1,19 +1,14 @@
-# Which figures to make, and whether to rebuild data/ from the raw sources first.
-# Paper numbering: 2 validation (held-out frames) | 3 War Machine vision latency | 4 War Machine hand
-# control | 5 War Machine Kalman filter | 6 FES | S1 latency of the old pipeline (next to War Machine) |
-# S2 real-time hand control, old system | S3 human 2-4 DOF hand control (BRAND triangulation) | S4 Kalman filter, old system |
-# S5 War Machine without the manipulandum (2026-10-09).
-# validation_all (earlier validation figure, all frames) and human_0930 (earlier human figure) are kept but off.
-# Moved out to notebooks/: the War Machine sensor check (war_machine_sensors/), the human latency figure and the
-# vision diagnostics (human_vision/).
-figures: {2: true, 3: true, 4: true, 5: true, 6: true, S1: true, S2: true, S3: true, S4: true, S5: true, validation_all: false, human_0930: false, human_1006: false}
-run_analysis: false
+# Which figures to make (python scripts/generate_figs.py). Paper numbering: 2 validation (held-out frames) |
+# 3 War Machine vision latency | 4 War Machine hand control | 5 War Machine Kalman filter | 6 FES |
+# S1 latency of the earlier pipeline (next to War Machine) | S2 real-time hand control, earlier system |
+# S3 human 2-4 DOF hand control | S4 Kalman filter, earlier system | S5 War Machine without the manipulandum.
+figures: {2: true, 3: true, 4: true, 5: true, 6: true, S1: true, S2: true, S3: true, S4: true, S5: true}
 
 # Whether each figure draws significance brackets/asterisks on its boxplots (Mann-Whitney U for
 # independent groups, Wilcoxon signed-rank for paired-by-session comparisons, Holm-corrected
 # within each panel). The underlying tests always run and are always written to
 # figures/<fig>_stats.csv regardless of this setting -- it only controls the bars on the plot.
-stats_bars: {2: false, 3: true, 4: true, 5: true, 6: false, S1: true, S2: true, S3: false, S4: true, S5: false, validation_all: false, human_0930: true}
+stats_bars: {2: false, 3: true, 4: true, 5: true, 6: false, S1: true, S2: true, S4: true, S5: false}
 
 # Online-metrics boxplots (figs S2 & S4): how the Bend/Freebie groups are built.
 #   split_feature: split Freebie into index_angle vs pip_y (see utils.online_feature / FEATURE_CUTOFF)
@@ -22,7 +17,7 @@ stats_bars: {2: false, 3: true, 4: true, 5: true, 6: false, S1: true, S2: true, 
 #   all_trials:    box + dots of every trial instead of one per-run mean (stats are on run means either way), for every online
 #                  metric (ONLINE_TRIAL_COLS in utils.py) -- bit rate and the time-to-target/orbiting/path
 #                  metrics are real per-trial values; success rate and targets/s are a running cumulative
-#                  rate instead, since neither has a real per-trial value (see metrics.run_metrics).
+#                  rate instead, since neither has a real per-trial value.
 online_metrics: {split_feature: true, split_dof: false, all_trials: true}
 
 # Publication style, shared by every figure (see scripts/utils.py:apply_style).
@@ -55,141 +50,16 @@ style:
     frame_acq: '#0a11c4'
     inference: '#519bc6'
     sender: '#2ccded'
-    pickup: '#0a11c4'
-    work: '#519bc6'
-    tail: '#2ccded'
     e2e: '#757272'
-    old: '#757272'
-    new_rt: '#1baf7a'
     keypoints: ['#FF4444', '#FF9900', '#33CC33', '#3399FF', '#B455E0']   # DIP PIP MCP WRIST MRS
-    fingers: {thumb: '#e0475f', index: '#f2a93b', middle: '#6db38a', ring: '#1f8ea3', pinky: '#a77bca', palm: '#9e9e9e'}   # fig 5 skeleton
-    fes_x: '#f5a300'       # fig 5 fingertip x (amber), y below (red-orange)
+    fingers: {thumb: '#e0475f', index: '#f2a93b', middle: '#6db38a', ring: '#1f8ea3', pinky: '#a77bca', palm: '#9e9e9e'}   # fig 6 skeleton
+    fes_x: '#f5a300'       # fig 6 fingertip x (amber), y below (red-orange)
     fes_y: '#e5734f'
     stim_window: '#dedede'
 
-# ---- analysis input: the master folder every figure is rebuilt from (master.pkl + nwb/<run>.nwb) ----
-master: data/master
-neuraldecoding_path: ~/Code/neuraldecoding      # clone of the lab's neuraldecoding repo (NWB loading, metrics, KF)
-
-# ---- human_0930 (3D human hand tracking, earlier version): one day of Run-XXX/Run-XXX.{nwb,rdb} ----
-human:
-  day_dir: "/run/user/1000/gvfs/smb-share:server=cnpl-drmanhattan.engin.umich.edu,share=share/Data/Humans/Jake/2026-09-30"
-  runs: {Run-002: 1, Run-003: 2, Run-015: 3, Run-016: 4}   # run -> DOF task (Run-001 ignored)
-  diag_run: Run-002                # run used by notebooks/human_vision/vision_diagnostics.py (the clean 1 DOF run)
-  plot_dofs: [1, 2, 3, 4]          # which DOF tasks to draw; [1, 2] drops the short 3/4-DOF runs (or: generate_figs.py --dofs 1 2)
-  prediction_dir: ~/predictions/20260930/20260930-1834   # vision pipeline folder covering the day; cut into each run's time window
-  rdb_python: ~/miniforge3/envs/improvPytorch/bin/python   # env with redis + msgpack, for scripts/human_rdb_latency.py (fig 6's RDB target sets)
-
-# ---- fig S3 (3D human hand tracking on the BRAND triangulation set-up, 2026-10-06): scripts/human_tuning.py ----
-# improv hand3d_bare (4 cameras, 60 fps, ONNX/TensorRT MediaPipe, geometric association) -> UDP joint angles ->
-# BRAND rhodes_2d_vision_bare (vision -> vision_dofs -> control_mux), 2 DOF: index MCP -> index, ring MCP -> mrs.
-human_bare:
-  day_dir: "/run/user/1000/gvfs/smb-share:server=cnpl-drmanhattan.engin.umich.edu,share=share/Data/Humans/Monkey/Jake/2026-10-06"
-  predictions: ~/predictions/20261006
-  angle_range: {index: [14, 80], ring: [20, 80]}      # vision_dofs finger_angle_range (deg), same every run
-  runs:   # setting = what changed vs run 1 (session notes); session = improv prediction folder
-    Run-001: {setting: 'EMA 0.3', session: 20261006-1506}
-    Run-002: {setting: 'EMA 0.3, 60 Hz out', session: 20261006-1506}
-    Run-003: {setting: 'SMA 5', session: 20261006-1506}
-    Run-004: {setting: 'SMA 10', session: 20261006-1506}
-    Run-005: {setting: 'EMA 0.3, 2 hands', session: 20261006-1529}
-    Run-006: {setting: 'EMA 0.3, 2 hands, One-Euro + glide', session: 20261006-1532}
-  figure_runs: [Run-001, Run-002, Run-003, Run-004, Run-005, Run-006]   # fig 6 latency / bit-rate boxes
-  example: {run: Run-005, first_trial: null, n_trials: 5}               # fig 6 2-DOF hand-control trace
-
-# ---- fig S3 (human 2-4 DOF hand control on the BRAND triangulation set-up, 2026-10-07): human_tuning.analyze_dof ----
-# improv hand3d_bare (4 cameras 0, 1, 3, 6; 1 hand; 60 fps), vision_dofs tick_filter (Run-007 on the new build); one run per DOF count.
-# Run-008 opens with 2 trials on the 2-DOF set; they are dropped (trials() keeps only trials that target every DOF).
-human_dof:
-  day_dir: "/run/user/1000/gvfs/smb-share:server=cnpl-drmanhattan.engin.umich.edu,share=share/Data/Humans/Monkey/Jake/2026-10-07"
-  predictions: ~/predictions/20261007
-  runs:
-    Run-007: {n_dof: 2, session: 20261007-0102}
-    Run-008: {n_dof: 3, session: 20261007-0102}
-    Run-009: {n_dof: 4, session: 20261007-0102}
-  task_image: assets/human_task_screenshot.png      # the task screen (cropped), fig S3C
-
-# ---- fig 6 (FES), panel A: the live free-behaviour run 2026-09-25 13:09, what the live processor stored ----
-# MediaPipe (GPU, num_hands per camera = 2, min detection confidence 0.1, likelihood gate off = -1), triangulate=False: 2D only.
-# 7 camera slots were wired; slots 2 (front_left) and 4 (back_left) delivered no frames. Steps after the mp4s end
-# (video_frames) are left out, as in the figure. Analysis only (scripts/fes_figure.analyze): the figure's own panel data
-# is still exported by improv/experiments/FES (tracking_3d_walkthrough.ipynb -> data/fig5_fes.npz).
-fes:
-  live_run: ~/predictions/20260925/20260925-1309
-  cameras: {0: top, 1: bottom_left, 3: front_right, 5: bottom_right, 6: back_right}   # slot -> TIS camera name
-  video_frames: 2550           # length of each camera_video/2026-09-25/130900 mp4 (all five the same)
-  figure_camera: 3             # the view drawn in fig 6A
-  figure_block: right          # MediaPipe handedness block drawn in fig 6A (the notebook's main_hand = 0)
-  detection_labels: data/fig6_live_detection_labels.csv   # what each stored detection is, labelled by eye (fes_figure.analyze)
-
-# ---- figs 3-5 (War Machine, BRAND rig): <master>/war_machine.pkl, built by `python scripts/war_machine.py` ----
+# Figures 3-5 (War Machine).
 war_machine:
-  server: "/run/user/1000/gvfs/smb-share:server=cnpl-drmanhattan.engin.umich.edu,share=share/Data/Monkeys/War Machine"
-  predictions: ~/predictions                            # improv vision logs, ~/predictions/<YYYYMMDD>/<session>/ 
-  rdb_python: ~/miniforge3/envs/improvPytorch/bin/python   # env with redis + msgpack, for scripts/war_machine_rdb.py
-  # Every run on the rhodes_1d_universal graph on these days (other graphs, earlier days, were debugging). Left out:
-  #   2026-09-30 Run-000: closed loop with an LSTM / KF6 decoder whose training run is not recorded (no bend/Freebie label)
-  #   2026-10-05 Run-003, Run-004: closed loop, not in the analysis yet
-  #   2026-10-06 Run-005 (throw-away test), Run-010, Run-011 (beta_velocity 1, 20 trials / aborted); 6-9 ran beta_velocity 0
-  # Decoder trials inside 09-30 Run-001, 007, 008 (decoder-setting tests per the notes) are out of their runs' mode.
-  runs:
-    '2026-09-30': [Run-001, Run-002, Run-003, Run-004, Run-005, Run-006, Run-007, Run-008, Run-009, Run-010, Run-011, Run-012, Run-013, Run-014]
-    '2026-10-02': [Run-001, Run-002, Run-003, Run-004, Run-005, Run-006, Run-007, Run-008]
-    '2026-10-05': [Run-001, Run-002]
-    '2026-10-06': [Run-001, Run-002, Run-003, Run-004, Run-006, Run-007, Run-008, Run-009]   # 6-9 = ABAB KF2 (A) / KF3 (B)
-  # hand-control run each decoder was trained on (session notes); the decoder's bend / Freebie label is that run's mode
-  kf_training_runs:
-    '2026-10-02': {decodeParamsKalmanFilter0.pkl: Run-001, decodeParamsKalmanFilter1.pkl: Run-002,
-                 decodeParamsKalmanFilter2.pkl: Run-005, decodeParamsKalmanFilter3.pkl: Run-006}
-    '2026-10-06': {decodeParamsKalmanFilter0.pkl: Run-001, decodeParamsKalmanFilter1.pkl: Run-002,
-                 decodeParamsKalmanFilter2.pkl: Run-003, decodeParamsKalmanFilter3.pkl: Run-004}   # A = KF2, B = KF3
-  decoder_channels: [16, 18, 20, 22, 24, 26, 28, 30]    # brand-monkeyrig decoder_configs/kf_rhodes.yaml index_selector_emg
   all_trials: true          # figs 4/5 online metrics: box + dots of every trial (true) or of one mean per run (false).
-                            # Stats are on the run means either way (no pseudo-replication); ticks show n runs, n trials.
+                            # Stats are on the run means either way (no pseudo-replication).
   fig3_merge_fps: false     # fig 3: pool every run (30 + 60 fps) into one histogram with only the 60 fps budget line
                             # (saved as fig3_latency_war_machine_merged)
-  exclude_closed_loop: []   # fig 4 online metrics without these runs, e.g. [2026-10-02_Run-003, 2026-10-02_Run-004]
-                            # (KF0 / KF1, trained before the 10-02 "FIXED RANGES" fix)
-  offline_kf_min_trials: 0  # fig 4D: skip hand-control runs with fewer in-mode trials (e.g. 30 drops 09-30 Run-001, 002, 007, 008, 014)
-  hand_control_trace: {run: 2026-10-02_Run-005, first_trial: null, n_trials: 6}   # bend drove, Freebie alongside
-  freebie_decoder_trace: {run: 2026-10-06_Run-007, first_trial: null, n_trials: 6, select: shortest_success}   # KF3 (B), trained on Freebie (Run-004)
-  bend_decoder_trace: {run: 2026-10-06_Run-006, first_trial: null, n_trials: 6, select: shortest_success}      # KF2 (A), trained on bend (Run-003)
-
-# Example sessions used by single-session panels.
-examples:
-  latency_session: 20260227-1020
-  latency_skip_first_frames: 1     # drop GPU warm-up frames before pooling
-  latency_window_frames: 9000        # frames shown in the per-actor trace
-  hand_control_trace: {session: 20260213-1028, first_trial: null, n_trials: 8}   # null = auto, inside Freebie coverage
-  # Freebie KF; 2 DOF, matched to bend_decoder_trace's success rate as closely as the data allows (0.978
-  # vs 0.711 -- the only 2-DOF closed-loop bend run) -- see paper/methods.md for the other 2-DOF candidate.
-  freebie_decoder_trace: {run: 20260223_Run-007, first_trial: null, n_trials: 8}
-  bend_decoder_trace: {run: 20251216_Run-003, first_trial: null, n_trials: 8}    # KF trained on bend sensors
-
-# ---- fig S5 (War Machine without the manipulandum, 2026-10-09): scripts/no_manipulandum_figure.py ----
-# Laid over `war_machine` (server, envs, channels inherited; war_machine.sub_config) into its own master,
-# <master>/war_machine_s5.pkl: `python scripts/war_machine.py --key war_machine_s5` (or generate_figs.py --figs S5 --analysis).
-# Session notes: Run-001 bend sensor in the manipulandum (300 trials) | Run-002 KF trained on Run-001 (150) |
-# Run-003 left out (manipulandum off, Run-002's decoder, frames used to train the no-manipulandum Freebie model
-# Rhodes_NoDoors, 1 keypoint: index tip) | Run-004 Freebie hand control, no manipulandum (90) | Run-005 the same (300) |
-# Run-006 no manipulandum, 129 trials: the decoder loaded was the bend-trained KF0 (decoder log), so it is left out. Panel C's KF
-# boxes are Run-002 (bend KF, manipulandum) and 2026-10-12 Run-002 (Freebie KF trained on that day's Run-001, no doors; notes:
-# 150 trials, target 0.15, hold 750/500 ms; the other 10-09 runs: target 0.10 / 0.15, hold 500 / 750 ms).
-war_machine_s5:
-  master_name: war_machine_s5
-  runs: {'2026-10-09': [Run-001, Run-002, Run-004, Run-005], '2026-10-12': [Run-002]}
-  groups:            # what each run is in panel C
-    2026-10-09_Run-001: bend
-    2026-10-09_Run-002: kf_bend
-    2026-10-09_Run-004: freebie
-    2026-10-09_Run-005: freebie
-    2026-10-12_Run-002: kf_freebie
-  example: {run: 2026-10-09_Run-005, first_trial: null, n_trials: 8, select: shortest_success}   # panel A / B trace, picked as fig 5's
-  example_bend: {run: 2026-10-09_Run-001, first_trial: null, n_trials: 8, select: shortest_success}   # panel B, bend sensor in the manipulandum
-  kf_folds: 5        # offline KF: validation segments per run (blocked, chronological), for its confidence intervals
-  # Panel A frame. analyze picks a moment in the example trace (frame_time_s: s from the trace start; null = the end
-  # of the hold on the most-flexed target, first and last trials excluded), finds its camera frame and prints the ffmpeg command that writes it.
-  # frame_image: that png once extracted (null = placeholder). crop: [x0, x1, y0, y1] px of the 960 x 720 frame, null = whole.
-  frame_time_s: 4.16
-  frame_image: assets/figS5_frame.png
-  crop: [300, 956, 60, 640]
