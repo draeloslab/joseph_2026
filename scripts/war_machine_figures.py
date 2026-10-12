@@ -66,8 +66,8 @@ def _metrics_nwb(r, path):
         io.write(nwb)
 
 
-def export_online_metrics(cfg):
-    """data/war_machine/run_metrics.csv + trial_metrics.csv: metrics.run_metrics on every run (same columns as the
+def export_online_metrics(cfg, prefix=''):
+    """data/war_machine/<prefix>run_metrics.csv + trial_metrics.csv: metrics.run_metrics on every run (same columns as the
     paper's run_metrics.csv / run_trial_metrics.csv) plus `group` (bend, freebie, kf_bend, kf_freebie)."""
     OUT.mkdir(parents=True, exist_ok=True)
     rows, trial_rows = [], []
@@ -81,8 +81,8 @@ def export_online_metrics(cfg):
             rows.append({'run_id': rid, 'group': r['group'], 'mode': r['mode'], 'decoder': r['decoder'],
                          'trained_on': r['trained_on'], **agg})
             trial_rows.append(tr.assign(run_id=rid, group=r['group']))
-    pd.DataFrame(rows).to_csv(OUT / 'run_metrics.csv', index=False)
-    pd.concat(trial_rows, ignore_index=True).to_csv(OUT / 'trial_metrics.csv', index=False)
+    pd.DataFrame(rows).to_csv(OUT / f'{prefix}run_metrics.csv', index=False)
+    pd.concat(trial_rows, ignore_index=True).to_csv(OUT / f'{prefix}trial_metrics.csv', index=False)
 
 
 def _metric_panels(cfg, runs, trials, keys):
@@ -293,16 +293,19 @@ def make_fig3(cfg):
 
 
 # ================================================================= fig 4: Kalman filter
-def _kf_nwb(r, signal, path):
-    """Neural (decoder channels, pre-binned) + one sensor at its own sample times, both cut to the run's task window,
-    + the in-mode trials: what kf_config's Dataset2DictBlock reads."""
-    lo, hi = _window(r)
+def _kf_nwb(r, signal, path, window=None):
+    """Neural (decoder channels, pre-binned) + one sensor at its own sample times, both cut to the run's task window
+    (or `window` = (lo, hi), keeping only the trials inside it), + the in-mode trials: what kf_config's Dataset2DictBlock
+    reads."""
+    lo, hi = window or _window(r)
     nt, nx = r['neural']; bt, bx = r['streams'][signal]
     nk, bk = (nt >= lo) & (nt <= hi), (bt >= lo) & (bt <= hi)
     beh = np.full((bk.sum(), 5), np.nan); beh[:, INDEX_DOF] = bx[bk]
     nwb = NWBFile(session_description='war machine KF', identifier=path.stem, session_start_time=DATE)
     nwb.add_trial_column(name='TargetPos', description='target, NaN off the index DOF')
     for _, row in wm.in_mode(r).iterrows():
+        if row.start_time < lo or row.stop_time > hi:
+            continue
         tp = np.full(5, np.nan); tp[INDEX_DOF] = row.target
         nwb.add_trial(start_time=row.start_time - lo, stop_time=row.stop_time - lo, TargetPos=tp)
     nwb.create_processing_module('ecephys', 'decoder channels').add(
@@ -313,9 +316,9 @@ def _kf_nwb(r, signal, path):
         io.write(nwb)
 
 
-def _train(cfg, r, signal, tmp):
+def _train(cfg, r, signal, tmp, window=None):
     path = Path(tmp) / f"{r['run_id']}_{signal}.nwb"
-    _kf_nwb(r, signal, path)
+    _kf_nwb(r, signal, path, window)
     chans = kf.GOOD_CHANS_EMG
     kf.GOOD_CHANS_EMG = list(range(r['neural'][1].shape[1]))   # the master holds only the decoder's channels
     try:

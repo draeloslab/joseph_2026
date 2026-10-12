@@ -6,6 +6,7 @@ only read this master, like the paper's master.pkl.
 
     python scripts/war_machine.py              # build the War Machine master (resumes an interrupted build)
     python scripts/war_machine.py --rebuild    # re-extract every run from the server
+    python scripts/war_machine.py --key war_machine_s5   # fig S5's master (2026-10-09, no manipulandum), see sub_config
 
 A sibling of master.pkl rather than a key inside it: master.pkl is rewritten from scratch by
 ~/freebie/script/build_master.py.
@@ -46,6 +47,16 @@ LATENCY_STAGES = [('frame_acq', 'TISstarts_front_left', 'TISlatencies_front_left
                   ('inference', 'proc_timestamps_cam2', 'proc_total_cam2'),
                   ('sender', 'sender_timestamps', 'sender_step_latencies'),
                   ('e2e', 'true_e2e_cam2_timestamps', 'true_e2e_cam2')]
+
+
+def sub_config(cfg, key):
+    """cfg with cfg[key] laid over cfg['war_machine'] (server, envs and channels inherited; runs, master_name, ...
+    replaced), for a second War Machine master next to the figs 3-5 one."""
+    return {**cfg, 'war_machine': {**cfg['war_machine'], 'kf_training_runs': {}, **cfg[key]}}
+
+
+def _master_path(cfg):
+    return master_dir(cfg) / f"{cfg['war_machine'].get('master_name', 'war_machine')}.pkl"
 
 
 def run_ids(cfg):
@@ -170,9 +181,9 @@ def build(cfg, rebuild=False):
     master = {'meta': {'built': datetime.datetime.now().isoformat(timespec='seconds'),
                        'decoder_channels': list(wmc['decoder_channels']), 'neural_pre_bin_ms': PRE_BIN_MS},
               'runs': runs}
-    with open(master_dir(cfg) / 'war_machine.pkl', 'wb') as f:
+    with open(_master_path(cfg), 'wb') as f:
         pickle.dump(master, f, protocol=4)
-    print('wrote', master_dir(cfg) / 'war_machine.pkl')
+    print('wrote', _master_path(cfg))
     return master
 
 
@@ -184,8 +195,8 @@ def _read(p):
 
 
 def load(cfg):
-    """<master>/war_machine.pkl, read once per process."""
-    return _read(str(master_dir(cfg) / 'war_machine.pkl'))
+    """<master>/war_machine.pkl (or config master_name), read once per process."""
+    return _read(str(_master_path(cfg)))
 
 
 def run(cfg, run_id, neural=False):
@@ -213,4 +224,7 @@ def corr(a, b, lo=None, hi=None):
 
 
 if __name__ == '__main__':
-    build(load_config(), rebuild='--rebuild' in sys.argv)
+    cfg = load_config()
+    if '--key' in sys.argv:
+        cfg = sub_config(cfg, sys.argv[sys.argv.index('--key') + 1])
+    build(cfg, rebuild='--rebuild' in sys.argv)

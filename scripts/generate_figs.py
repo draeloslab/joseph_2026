@@ -14,6 +14,7 @@ matplotlib.use('Agg')
 
 import utils
 import validation_figure, validation_figure_testonly, latency_figure, fig3_supplement_figure, fig4_supplement_figure, fes_figure, human_figure, human_tuning
+import no_manipulandum_figure
 import war_machine_figures as wmf
 
 FIGURES = {
@@ -27,12 +28,13 @@ FIGURES = {
     'S3': (human_tuning.analyze_dof, human_figure.make_figure),                # human 2-4 DOF hand control, BRAND triangulation (2026-10-07)
     'human_1006': (human_tuning.analyze, human_figure.make_figure_1006),       # 2026-10-06 tuning figure (2 DOF)
     'S4': (fig4_supplement_figure.analyze, fig4_supplement_figure.make_figure),  # Kalman filter, old system
+    'S5': (no_manipulandum_figure.analyze, no_manipulandum_figure.make_figure),  # War Machine without the manipulandum (2026-10-09)
     'validation_all': (validation_figure.analyze, validation_figure.make_figure),      # earlier validation figure (all frames)
     'human_0930': (human_figure.analyze, human_figure.make_figure_0930),       # earlier 09-30 human figure (hand3d node)
 }
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--figs', nargs='+', help='override config: which figures (2 3 4 5 6 S1 S2 S3 S4 validation_all human_0930); 3-5 are War Machine')
+parser.add_argument('--figs', nargs='+', help='override config: which figures (2 3 4 5 6 S1 S2 S3 S4 S5 validation_all human_0930); 3-5 are War Machine')
 parser.add_argument('--analysis', action='store_true', help='override config: rerun the analysis from the master file first')
 parser.add_argument('--retrain', action='store_true', help='retrain the cached offline KFs instead of reusing them')
 parser.add_argument('--dofs', nargs='+', type=int, help='fig 6: which DOF tasks to draw, e.g. --dofs 1 2 (default: config human.plot_dofs)')

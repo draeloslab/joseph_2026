@@ -1,18 +1,19 @@
 # Which figures to make, and whether to rebuild data/ from the raw sources first.
 # Paper numbering: 2 validation (held-out frames) | 3 War Machine vision latency | 4 War Machine hand
 # control | 5 War Machine Kalman filter | 6 FES | S1 latency of the old pipeline (next to War Machine) |
-# S2 real-time hand control, old system | S3 human 2-4 DOF hand control (BRAND triangulation) | S4 Kalman filter, old system.
+# S2 real-time hand control, old system | S3 human 2-4 DOF hand control (BRAND triangulation) | S4 Kalman filter, old system |
+# S5 War Machine without the manipulandum (2026-10-09).
 # validation_all (earlier validation figure, all frames) and human_0930 (earlier human figure) are kept but off.
 # Moved out to notebooks/: the War Machine sensor check (war_machine_sensors/), the human latency figure and the
 # vision diagnostics (human_vision/).
-figures: {2: true, 3: true, 4: true, 5: true, 6: true, S1: true, S2: true, S3: true, S4: true, validation_all: false, human_0930: false, human_1006: false}
+figures: {2: true, 3: true, 4: true, 5: true, 6: true, S1: true, S2: true, S3: true, S4: true, S5: true, validation_all: false, human_0930: false, human_1006: false}
 run_analysis: false
 
 # Whether each figure draws significance brackets/asterisks on its boxplots (Mann-Whitney U for
 # independent groups, Wilcoxon signed-rank for paired-by-session comparisons, Holm-corrected
 # within each panel). The underlying tests always run and are always written to
 # figures/<fig>_stats.csv regardless of this setting -- it only controls the bars on the plot.
-stats_bars: {2: false, 3: true, 4: true, 5: true, 6: false, S1: true, S2: true, S3: false, S4: true, validation_all: false, human_0930: true}
+stats_bars: {2: false, 3: true, 4: true, 5: true, 6: false, S1: true, S2: true, S3: false, S4: true, S5: false, validation_all: false, human_0930: true}
 
 # Online-metrics boxplots (figs S2 & S4): how the Bend/Freebie groups are built.
 #   split_feature: split Freebie into index_angle vs pip_y (see utils.online_feature / FEATURE_CUTOFF)
@@ -46,6 +47,8 @@ style:
     pip_y: '#1baf7a'
     mrs_x: '#eb6834'
     freebie: '#2a78d6'
+    kf_bend: '#8c8c8c'       # fig S5: KF trained on the bend sensor / on Freebie, next to the hand-control boxes
+    kf_freebie: '#8fbbe8'
     target_hit: '#d9d9d9'
     target_miss: '#f6c5c5'
     budget: '#111111'      # frame-budget lines (black in every figure)
@@ -162,3 +165,31 @@ examples:
   # vs 0.711 -- the only 2-DOF closed-loop bend run) -- see paper/methods.md for the other 2-DOF candidate.
   freebie_decoder_trace: {run: 20260223_Run-007, first_trial: null, n_trials: 8}
   bend_decoder_trace: {run: 20251216_Run-003, first_trial: null, n_trials: 8}    # KF trained on bend sensors
+
+# ---- fig S5 (War Machine without the manipulandum, 2026-10-09): scripts/no_manipulandum_figure.py ----
+# Laid over `war_machine` (server, envs, channels inherited; war_machine.sub_config) into its own master,
+# <master>/war_machine_s5.pkl: `python scripts/war_machine.py --key war_machine_s5` (or generate_figs.py --figs S5 --analysis).
+# Session notes: Run-001 bend sensor in the manipulandum (300 trials) | Run-002 KF trained on Run-001 (150) |
+# Run-003 left out (manipulandum off, Run-002's decoder, frames used to train the no-manipulandum Freebie model
+# Rhodes_NoDoors, 1 keypoint: index tip) | Run-004 Freebie hand control, no manipulandum (90) | Run-005 the same (300) |
+# Run-006 no manipulandum, 129 trials: the decoder loaded was the bend-trained KF0 (decoder log), so it is left out. Panel C's KF
+# boxes are Run-002 (bend KF, manipulandum) and 2026-10-12 Run-002 (Freebie KF trained on that day's Run-001, no doors; notes:
+# 150 trials, target 0.15, hold 750/500 ms; the other 10-09 runs: target 0.10 / 0.15, hold 500 / 750 ms).
+war_machine_s5:
+  master_name: war_machine_s5
+  runs: {'2026-10-09': [Run-001, Run-002, Run-004, Run-005], '2026-10-12': [Run-002]}
+  groups:            # what each run is in panel C
+    2026-10-09_Run-001: bend
+    2026-10-09_Run-002: kf_bend
+    2026-10-09_Run-004: freebie
+    2026-10-09_Run-005: freebie
+    2026-10-12_Run-002: kf_freebie
+  example: {run: 2026-10-09_Run-005, first_trial: null, n_trials: 8, select: shortest_success}   # panel A / B trace, picked as fig 5's
+  example_bend: {run: 2026-10-09_Run-001, first_trial: null, n_trials: 8, select: shortest_success}   # panel B, bend sensor in the manipulandum
+  kf_folds: 5        # offline KF: validation segments per run (blocked, chronological), for its confidence intervals
+  # Panel A frame. analyze picks a moment in the example trace (frame_time_s: s from the trace start; null = the end
+  # of the hold on the most-flexed target, first and last trials excluded), finds its camera frame and prints the ffmpeg command that writes it.
+  # frame_image: that png once extracted (null = placeholder). crop: [x0, x1, y0, y1] px of the 960 x 720 frame, null = whole.
+  frame_time_s: 4.16
+  frame_image: assets/figS5_frame.png
+  crop: [300, 956, 60, 640]

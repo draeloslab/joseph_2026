@@ -20,6 +20,8 @@ wrapping clock, so samples are timed from the header ts (the BRAND clock all str
 Needs redis-server on PATH plus redis and msgpack (config war_machine.rdb_python). Called by war_machine.py.
 
     python war_machine_rdb.py <run.rdb> <out.npz> <channel> [<channel> ...]
+    python war_machine_rdb.py --raw <run.rdb> <out.npz> <t0> <t1> <channel> [<channel> ...]
+        the raw 2 kHz `continuousNeural` samples of those channels between two BRAND times (s), for example traces
 """
 import sys
 sys.path.remove(sys.path[0])   # scripts/ holds utils.py etc., which shadow modules numpy/pandas import
@@ -120,5 +122,26 @@ def extract(rdb, out, channels):
         proc.terminate(); proc.wait(); shutil.rmtree(tmp)
 
 
+def extract_raw(rdb, out, t0, t1, channels):
+    proc, c, tmp = load_rdb(rdb)
+    try:
+        nt, nx = [], []
+        for _, d in read_stream(c, 'continuousNeural'):
+            if not t0 <= ts(d) <= t1 + 0.01:
+                continue
+            a = unpack(d[b'data'])
+            n = len(a['timestamps'])
+            nt.append(ts(d) - SAMPLE_DT * np.arange(n - 1, -1, -1))
+            nx.append(np.asarray(a['samples'], dtype=np.float32).reshape(96, n).T[:, channels])
+        t, x = np.concatenate(nt), np.concatenate(nx)
+        keep = (t >= t0) & (t <= t1)
+        np.savez(out, t=t[keep], x=x[keep], channels=channels)
+    finally:
+        proc.terminate(); proc.wait(); shutil.rmtree(tmp)
+
+
 if __name__ == '__main__':
-    extract(sys.argv[1], sys.argv[2], [int(ch) for ch in sys.argv[3:]])
+    if sys.argv[1] == '--raw':
+        extract_raw(sys.argv[2], sys.argv[3], float(sys.argv[4]), float(sys.argv[5]), [int(ch) for ch in sys.argv[6:]])
+    else:
+        extract(sys.argv[1], sys.argv[2], [int(ch) for ch in sys.argv[3:]])
