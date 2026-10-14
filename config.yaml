@@ -1,24 +1,7 @@
-# Which figures to make (python scripts/generate_figs.py). Paper numbering: 2 validation (held-out frames) |
-# 3 War Machine vision latency | 4 War Machine hand control | 5 War Machine Kalman filter | 6 FES |
-# S1 latency of the earlier pipeline (next to War Machine) | S2 real-time hand control, earlier system |
-# S3 human 2-4 DOF hand control | S4 Kalman filter, earlier system | S5 War Machine without the manipulandum.
-figures: {2: true, 3: true, 4: true, 5: true, 6: true, S1: true, S2: true, S3: true, S4: true, S5: true}
-
-# Whether each figure draws significance brackets/asterisks on its boxplots (Mann-Whitney U for
-# independent groups, Wilcoxon signed-rank for paired-by-session comparisons, Holm-corrected
-# within each panel). The underlying tests always run and are always written to
-# figures/<fig>_stats.csv regardless of this setting -- it only controls the bars on the plot.
-stats_bars: {2: false, 3: true, 4: true, 5: true, 6: false, S1: true, S2: true, S4: true, S5: false}
-
-# Online-metrics boxplots (figs S2 & S4): how the Bend/Freebie groups are built.
-#   split_feature: split Freebie into index_angle vs pip_y (see utils.online_feature / FEATURE_CUTOFF)
-#                  instead of one combined Freebie group.
-#   split_dof:     further split every group into 1 DOF / 2 DOF.
-#   all_trials:    box + dots of every trial instead of one per-run mean (stats are on run means either way), for every online
-#                  metric (ONLINE_TRIAL_COLS in utils.py) -- bit rate and the time-to-target/orbiting/path
-#                  metrics are real per-trial values; success rate and targets/s are a running cumulative
-#                  rate instead, since neither has a real per-trial value.
-online_metrics: {split_feature: true, split_dof: false, all_trials: true}
+# Whether each figure draws significance brackets/asterisks on its boxplots. The tests (two-sided Mann-Whitney U for
+# independent groups, Wilcoxon signed-rank for paired comparisons, Holm-corrected within each panel) always run and are
+# written to figures/<fig>_stats.csv; this only controls the bars on the plot.
+stats_bars: {2: false, 3: true, 4: true, 5: true, 6: false, S1: false, S2: true, S3: true, S4: true, S5: false}
 
 # Publication style, shared by every figure (see scripts/utils.py:apply_style).
 style:
@@ -42,8 +25,6 @@ style:
     pip_y: '#1baf7a'
     mrs_x: '#eb6834'
     freebie: '#2a78d6'
-    kf_bend: '#8c8c8c'       # fig S5: KF trained on the bend sensor / on Freebie, next to the hand-control boxes
-    kf_freebie: '#8fbbe8'
     target_hit: '#d9d9d9'
     target_miss: '#f6c5c5'
     budget: '#111111'      # frame-budget lines (black in every figure)
@@ -57,9 +38,16 @@ style:
     fes_y: '#e5734f'
     stim_window: '#dedede'
 
-# Figures 3-5 (War Machine).
-war_machine:
-  all_trials: true          # figs 4/5 online metrics: box + dots of every trial (true) or of one mean per run (false).
-                            # Stats are on the run means either way (no pseudo-replication).
-  fig3_merge_fps: false     # fig 3: pool every run (30 + 60 fps) into one histogram with only the 60 fps budget line
-                            # (saved as fig3_latency_war_machine_merged)
+# Settings of the from-scratch analysis (scripts/analysis/, run with --from-raw). The figures themselves do not read this block.
+analysis:
+  keypoint_likelihood_min: 0.99        # fig 2: predictions below this likelihood are not scored
+  latency_skip_first_frames: 1         # fig S2: warm-up frames dropped before pooling
+  examples:                            # the traces drawn (run or session, number of consecutive trials)
+    fig4: {run: 2026-10-02_Run-005, n_trials: 6}
+    fig5_freebie: {run: 2026-10-06_Run-007, n_trials: 6, select: shortest_success}
+    fig5_bend: {run: 2026-10-06_Run-006, n_trials: 6, select: shortest_success}
+    figS3: {session: 20260213-1028, n_trials: 8}
+    figS4_freebie: {run: 20260223_Run-007, n_trials: 8}
+    figS4_bend: {run: 20251216_Run-003, n_trials: 8}
+  human_runs: {Run-007: 2, Run-008: 3, Run-009: 4}      # fig S1: run -> DOF count
+  fes: {video_frames: 2550}            # fig 6: length of each camera's video, in frames

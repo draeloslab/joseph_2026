@@ -23,11 +23,11 @@ CROP_ASPECT = {'rt': 1.0, 'stim': 1.48}   # width / height of the cropped frames
 
 LAYOUT = [['rt_0', 'rt_1', 'stim_0', 'stim_1'],
           ['rt_trace', 'rt_trace', 'stim_trace', 'stim_trace']]
-SIZE = (16, 9)      # same scale as the other figures (16-18 in wide), so the shared fonts / line widths read the same
+SIZE = (16, 9)
 WIDTH_RATIOS = [1, 1, 1.4, 1.4]
 HEIGHT_RATIOS = [1, 0.8]
-LINE_MM = 68.0     # width of each line plot's axes at print size (the image pairs above them measure 67.5 and 68.5 mm)
-TRACE_LW = 5      # both traces drawn at the same line thickness (no point markers, which made the left one look heavier)
+LINE_MM = 68.0     # width of each line plot's axes at print size, about that of the image pair above it
+TRACE_LW = 5
 
 
 def load():
@@ -85,7 +85,7 @@ def panel_rt_trace(ax, d):
 
 def panel_stim_trace(ax, d):
     for a, b in d['stim_windows']:
-        ax.axvspan(a, b, color=COLORS['stim_window'], alpha=0.8, lw=0)     # stimulation periods (conditions listed in the legend)
+        ax.axvspan(a, b, color=COLORS['stim_window'], alpha=0.8, lw=0)     # stimulation periods
     ax.plot(d['stim_t'], d['stim_x'] - np.nanmedian(d['stim_x']), color=COLORS['fingers']['middle'], lw=TRACE_LW)   # = the middle knuckle on the images
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Middle knuckle x (mm)')
@@ -99,7 +99,7 @@ LABELS = {'rt_0': 'A', 'stim_0': 'B'}
 
 def make_figure(cfg):
     def align(fig, axd):
-        # both line plots the same size, LINE_MM wide at print size (images are re-cut by hand later); left edges stay under the images
+        # both line plots LINE_MM wide at print size, left edges under the images
         w = LINE_MM / STYLE['figure_width_mm']
         for kind in ('rt', 'stim'):
             a, t = axd[f'{kind}_0'].get_position(), axd[f'{kind}_trace'].get_position()

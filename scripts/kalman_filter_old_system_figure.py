@@ -1,4 +1,4 @@
-"""Figure S4: Kalman filter decoding from EMG on the earlier system, trained on Freebie signals vs bend sensors."""
+"""Figure S4: Kalman filter decoding from EMG, Monkey N (earlier system), trained on Freebie signals vs bend sensors."""
 from functools import partial
 
 import matplotlib.pyplot as plt
@@ -24,21 +24,18 @@ LAYOUT = [['freebie'] * 3 + [_D[0]] * 3 + [_D[2]] * 3,
           ['bend'] * 3 + [_D[1]] * 3 + [_D[3]] * 3,
           [k for k in m[:3] for _ in range(3)],
           [k for k in m[3:] for _ in range(3)]]
-WIDTH_RATIOS = None
 SIZE = (21, 19)
 HEIGHT_RATIOS = [1.1, 1.1, 1, 1]
 TRACE_DOFS = [(1, 'Index', 'index_angle', 1.45), (3, 'MRS', 'mrs_x', 0.0)]   # (dof, label, freebie colour, y offset)
 
 
-def load(cfg):
-    opts = cfg['online_metrics']
+def load():
     runs = pd.read_csv(DATA / 'run_metrics.csv')
     closed = runs[runs['mode'] == 'closed_loop']
     return {**{key: (dict(np.load(DATA / f'figS4_example_{key}_trace.npz')),
                      pd.read_csv(DATA / f'figS4_example_{key}_trials.csv')) for key in DECODERS},
             'offline': pd.read_csv(DATA / 'offline_kf.csv'),
-            'groups': split_groups(closed, opts['split_feature'], opts['split_dof']),
-            'trials': pd.read_csv(DATA / 'run_trial_metrics.csv'), 'show_trials': opts['all_trials']}
+            'groups': split_groups(closed), 'trials': pd.read_csv(DATA / 'run_trial_metrics.csv')}
 
 
 # ---------------------------------------------------------------- panels
@@ -80,8 +77,8 @@ def panel_offline(ax, d, dof, metric):
 
 
 def panel_metric(ax, d, metric):
-    # box + dots: every trial (config online_metrics.all_trials) or the run means; descriptives and tests on one mean per session
-    metric_panel(ax, d['groups'], metric, stats_trials=d['trials'], show_trials=d['show_trials'], by_session=True)
+    # every trial drawn; descriptives and tests on one mean per session
+    metric_panel(ax, d['groups'], metric, stats_trials=d['trials'], by_session=True)
 
 
 PANELS = {**{k: partial(panel_decode, key=k) for k in DECODERS},
@@ -114,6 +111,6 @@ def spread(fig, axd):
 
 
 def make_figure(cfg):
-    return compose(LAYOUT, PANELS, load(cfg), SIZE, 'figS4_kalman_filter_old_system', labels=LABELS,
+    return compose(LAYOUT, PANELS, load(), SIZE, 'figS4_kalman_filter_old_system', labels=LABELS,
                    stats_bars=cfg['stats_bars']['S4'], height_ratios=HEIGHT_RATIOS,
-                   width_ratios=WIDTH_RATIOS, post_layout=spread)
+                   post_layout=spread)

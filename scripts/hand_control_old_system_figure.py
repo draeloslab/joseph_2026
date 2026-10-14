@@ -1,4 +1,4 @@
-"""Figure S2: Freebie tracking vs bend sensors during real-time hand control on the earlier system."""
+"""Figure S3: Freebie tracking vs bend sensors during real-time hand control, Monkey N (earlier system)."""
 from functools import partial
 
 import numpy as np
@@ -19,15 +19,13 @@ HEIGHT_RATIOS = [0.6, 0.6, 1, 1]
 TRACE_T_MAX = 6        # s; panel A only shows the first 6 s of the example trials
 
 
-def load(cfg):
-    opts = cfg['online_metrics']
+def load():
     runs = pd.read_csv(DATA / 'run_metrics.csv')
     hand = runs[runs['mode'] == 'hand_control']
-    return {'trace': dict(np.load(DATA / 'figS2_example_trace.npz')),
-            'ex_trials': pd.read_csv(DATA / 'figS2_example_trials.csv'),
+    return {'trace': dict(np.load(DATA / 'figS3_example_trace.npz')),
+            'ex_trials': pd.read_csv(DATA / 'figS3_example_trials.csv'),
             'corr': pd.read_csv(DATA / 'freebie_bend_corr.csv'),
-            'groups': split_groups(hand, opts['split_feature'], opts['split_dof']),
-            'trials': pd.read_csv(DATA / 'run_trial_metrics.csv'), 'show_trials': opts['all_trials']}
+            'groups': split_groups(hand), 'trials': pd.read_csv(DATA / 'run_trial_metrics.csv')}
 
 
 # ---------------------------------------------------------------- panels
@@ -38,7 +36,7 @@ def panel_trace(ax, d, dof):
     target_trace(ax, d['ex_trials'], f'target_{dof}', lines, f"{'Index' if dof == 1 else 'MRS'}\nposition (a.u.)")
     ax.set_xlim(0, TRACE_T_MAX)
     if dof == 1:
-        ax.set_title(f"Hand control example", pad=34)   # clear the legend row above the axes
+        ax.set_title('Hand control example', pad=34)   # clear the legend row above the axes
 
 
 def panel_corr(ax, d):
@@ -51,8 +49,8 @@ def panel_corr(ax, d):
 
 
 def panel_metric(ax, d, metric):
-    # box + dots: every trial (config online_metrics.all_trials) or the run means; descriptives and tests on one mean per session
-    metric_panel(ax, d['groups'], metric, stats_trials=d['trials'], show_trials=d['show_trials'], by_session=True)
+    # every trial drawn; descriptives and tests on one mean per session
+    metric_panel(ax, d['groups'], metric, stats_trials=d['trials'], by_session=True)
 
 
 PANELS = {'trace_1': partial(panel_trace, dof=1), 'trace_3': partial(panel_trace, dof=3), 'corr': panel_corr,
@@ -61,5 +59,5 @@ LABELS = {'trace_1': 'A', 'corr': 'B', 'success_rate': 'C'}
 
 
 def make_figure(cfg):
-    return compose(LAYOUT, PANELS, load(cfg), SIZE, 'figS2_hand_control_old_system', labels=LABELS,
-                   stats_bars=cfg['stats_bars']['S2'], height_ratios=HEIGHT_RATIOS)
+    return compose(LAYOUT, PANELS, load(), SIZE, 'figS3_hand_control_old_system', labels=LABELS,
+                   stats_bars=cfg['stats_bars']['S3'], height_ratios=HEIGHT_RATIOS)

@@ -1,7 +1,5 @@
-"""
-Figures 3-5, War Machine (Monkey R, BRAND rig, index DOF): 3 vision-pipeline latency, 4 hand control (bend sensor vs
-Freebie), 5 Kalman filter (online decoders trained on each, and offline KFs). Drawn from data/war_machine/ only.
-"""
+"""Figures 3-5, Monkey R (index DOF): 3 vision-pipeline latency, 4 hand control (bend sensor vs Freebie), 5 Kalman
+filter (online decoders trained on each sensor, and offline KFs). Drawn from data/monkey_r/."""
 from functools import partial
 
 import matplotlib.pyplot as plt
@@ -11,7 +9,7 @@ import pandas as pd
 import utils
 from utils import COLORS, DATA, ONLINE_METRICS, compose
 
-OUT = DATA / 'war_machine'
+OUT = DATA / 'monkey_r'
 C_GAP = 0.75                   # fig 4: gap between the C panels relative to the default
 C_SHRINK = 0.8                 # fig 4: width of the online-metric (C) panels relative to the default 2 boxes x BOX_IN
 LABEL = {'bend': 'Bend sensor', 'freebie': 'Freebie'}
@@ -23,16 +21,15 @@ def _color(group):
     return COLORS[group.replace('kf_', '')]
 
 
-def _metric_panels(cfg, runs, trials, keys):
-    labels = {'bend': 'Bend sensor', 'freebie': 'Freebie', 'kf_bend': 'Bend sensor', 'kf_freebie': 'Freebie'}
-    groups = [(labels[k], runs[runs['group'] == k], _color(k)) for k in keys]
-    show = cfg['war_machine']['all_trials']        # box + dots: every trial, or one mean per run; stats on run means either way
-    return {m: partial(lambda ax, d, m: utils.metric_panel(ax, groups, m, stats_trials=trials, show_trials=show), m=m)
-            for m in ONLINE_METRICS}
+def _metric_panels(runs, trials, keys):
+    """One panel per online metric: every trial drawn, tested on run means."""
+    groups = [(LABEL[k.replace('kf_', '')], runs[runs['group'] == k], _color(k)) for k in keys]
+    return {m: partial(lambda ax, d, m: utils.metric_panel(ax, groups, m, stats_trials=trials), m=m) for m in ONLINE_METRICS}
 
 
-def _boxes_and_trace(ax, trials, series, ylabel, legend=True):
-    """utils.target_trace with a line style per series, so a dashed trace stays visible on top of a solid one."""
+def _boxes_and_trace(ax, trials, series, ylabel, legend=False):
+    """Target windows (grey hit / red miss) under traces with a line style each, so a dashed trace stays visible on top
+    of a solid one. legend: False or 'lower right' (inside the axes, on a white backing)."""
     t0, t1 = trials['start_time'].iloc[0], trials['stop_time'].iloc[-1]
     for _, tr in trials.iterrows():
         rad = tr['target_radius']
@@ -45,12 +42,9 @@ def _boxes_and_trace(ax, trials, series, ylabel, legend=True):
     ax.set_ylim(-0.1, 1.1)
     ax.set_ylabel(ylabel)
     ax.set_xlabel('Time (s)')
-    if legend == 'lower right':        # stacked, inside the axes, on a white backing so it stays legible over the target boxes
+    if legend:
         ax.legend(loc='lower right', ncol=1, frameon=True, facecolor='white', edgecolor='none', framealpha=0.9,
                   borderaxespad=0.3, handlelength=1.6)
-    elif legend:
-        ax.legend(loc='lower left', bbox_to_anchor=(0, 1.01), ncol=len(series), borderaxespad=0, columnspacing=1.2,
-                  handlelength=1.6)
 
 
 def _load_example(name):
@@ -59,15 +53,12 @@ def _load_example(name):
 
 # ================================================================= fig 3: vision-pipeline latency
 def make_fig3(cfg):
-    """config war_machine.fig3_merge_fps: true pools every run into one histogram with only the 60 fps budget."""
+    """A: end-to-end latency of every frame, one histogram per camera rate; B: each run's mean time per stage."""
     runs = pd.read_csv(OUT / 'latency_runs.csv')
     frames = np.load(OUT / 'latency_e2e_frames.npz')
     drops = pd.read_csv(OUT / 'latency_drops.csv')
-    merge = cfg['war_machine'].get('fig3_merge_fps', False)
-    fps = [60] if merge else sorted(runs['fps'].unique())
-    groups = [('All runs', runs['run_id'], 60)] if merge else \
-             [(f'{f} fps runs', runs.loc[runs['fps'] == f, 'run_id'], f) for f in fps]
-    budgets = [60] if merge else fps
+    fps = sorted(runs['fps'].unique())
+    groups = [(f'{f} fps runs', runs.loc[runs['fps'] == f, 'run_id'], f) for f in fps]
 
     def hist(ax, d):
         # 60 fps first, so the grey 30 fps histogram is drawn on top; the legend only names the two colours
@@ -93,14 +84,12 @@ def make_fig3(cfg):
     def stages(ax, d):
         utils.boxes(ax, [(label, runs[k]) for k, label in STAGE_LABELS], [COLORS[k] for k, _ in STAGE_LABELS],
                     ylabel='Processing time (ms)', unit='run')
-        for f in budgets:                      # frame budgets (1,000 / fps): 33.3 ms at 30 fps, 16.7 ms at 60 fps
+        for f in fps:                          # frame budgets (1,000 / fps): 33.3 ms at 30 fps, 16.7 ms at 60 fps
             ax.axhline(1000 / f, color=COLORS['budget'], ls='--')
         ax.set_ylim(0, max(1000 / min(fps), runs['e2e'].max()) * 1.12)
 
-    name = 'fig3_latency_war_machine_merged' if merge else 'fig3_latency_war_machine'
-    fig = compose([['hist', 'stages']], {'hist': hist, 'stages': stages}, {}, (18, 6.5), name,
-                  labels={'hist': 'A', 'stages': 'B'}, stats_bars=cfg['stats_bars'][3])
-    return fig
+    return compose([['hist', 'stages']], {'hist': hist, 'stages': stages}, {}, (18, 6.5), 'fig3_latency',
+                   labels={'hist': 'A', 'stages': 'B'}, stats_bars=cfg['stats_bars'][3])
 
 
 # ================================================================= fig 4: hand control
@@ -109,7 +98,7 @@ def make_fig4(cfg):
     corr = pd.read_csv(OUT / 'sensor_corr.csv')
     ex, ex_trials = _load_example('fig4_example')
     m = list(ONLINE_METRICS)
-    layout = [['trace'] * 3 + ['corr'] * 3,       # same arrangement / row heights as fig 5
+    layout = [['trace'] * 3 + ['corr'] * 3,
               [k for k in m[:3] for _ in range(2)], [k for k in m[3:] for _ in range(2)]]
 
     def trace(ax, d):
@@ -122,8 +111,7 @@ def make_fig4(cfg):
         ax.set_ylim(0, 1.05)
 
     def widths(fig, axd):
-        # C's panels narrower (C_SHRINK) and closer together (C_GAP x the default gap); B then widened to end where C ends, so A + B span C's width.
-        # B's x limits are set so its box is as wide as one box in C.
+        # C narrower (C_SHRINK) and closer together (C_GAP); B widened to end where C ends, its box as wide as one of C's
         W = fig.get_figwidth()
         c = [[axd[k] for k in m[:3]], [axd[k] for k in m[3:]]]
         x0, gap = c[0][0].get_position().x0, (c[0][1].get_position().x0 - c[0][0].get_position().x1) * C_GAP
@@ -139,7 +127,7 @@ def make_fig4(cfg):
         half = (right - b.x0) * W / (w * W / (hi - lo)) / 2          # B width / inches per x unit in C / 2
         axd['corr'].set_xlim(1 - half, 1 + half)
 
-    panels = {'trace': trace, 'corr': corrp, **_metric_panels(cfg, runs, trials, ['bend', 'freebie'])}
+    panels = {'trace': trace, 'corr': corrp, **_metric_panels(runs, trials, ['bend', 'freebie'])}
     return compose(layout, panels, {}, (12, 10.6 * 2.95 / 3.95), 'fig4_hand_control',
                    labels={'trace': 'A', 'corr': 'B', 'success_rate': 'C'},
                    stats_bars=cfg['stats_bars'][4], height_ratios=[0.95, 1, 1], post_layout=widths)
@@ -158,7 +146,7 @@ def make_fig5(cfg):
     def decode(ax, d, key):
         ex, ex_trials = _load_example(f'fig5_example_{key}')
         _boxes_and_trace(ax, ex_trials, [(ex['cursor_t'], ex['cursor'], 'Decoded position', COLORS[key], 2.5, '-')],
-                         'Position (a.u.)', legend=False)
+                         'Position (a.u.)')
 
     def offline(ax, d, metric):
         by = {s: g.set_index('run_id')[metric] for s, g in off.groupby('signal')}
@@ -167,7 +155,7 @@ def make_fig5(cfg):
                     unit='run')
 
     panels = {'freebie': partial(decode, key='freebie'), 'bend': partial(decode, key='bend'),
-              **_metric_panels(cfg, runs, trials, ['kf_bend', 'kf_freebie']),
+              **_metric_panels(runs, trials, ['kf_bend', 'kf_freebie']),
               **{k: partial(offline, metric=k) for k in ('nmse_valid', 'correlation_valid')}}
     return compose(layout, panels, {}, (12, 10.6), 'fig5_kalman_filter',
                    labels={'freebie': 'A', 'bend': 'B', 'success_rate': 'C', 'nmse_valid': 'D'},

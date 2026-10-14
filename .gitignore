@@ -1,7 +1,10 @@
 figures/
+figures_from_raw/
 __pycache__/
 *.log
 notebooks/
 *.ipynb
 data/
+data_from_raw/
 assets/
+raw

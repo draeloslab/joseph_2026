@@ -1,28 +1,26 @@
-"""Figure 2: Freebie keypoints vs manual labels on DLC held-out frames (never in the training split of the model that
-predicted them). The two example frames are assets/fig2_{top,side}.png, already cropped; their labels / predictions
-(data/keypoint_labels_heldout.npz) are in the full camera frame's pixels, <view>_crop_x0 the crop's first column."""
+"""Figure 2: Freebie keypoints vs manual labels on held-out frames (never in the training split of the model that
+predicted them). The example frames are assets/fig2_{top,side}.png, already cropped; their labels / predictions
+(data/fig2_keypoint_labels.npz) are in the full camera frame's pixels, <view>_crop_x0 the crop's first column."""
 from functools import partial
 
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
-from scipy.stats import gaussian_kde
 
 from utils import COLORS, DATA, ROOT, compose, significance, describe, marker_area
 
 TOP_KPS = ['DIP', 'PIP', 'MCP', 'WRIST']
 KEYPOINTS = TOP_KPS + ['MRS']
-LIKELIHOOD_MIN = 0.99
 THRESHOLD_PX = 20      # size of the smallest joint
-LABEL_GRID = [(0.03, 0.64), (0.03, 0.42), (0.03, 0.20), (0.52, 0.20)]   # DIP PIP MCP WRIST label boxes (axes fraction): an L, red / orange / green down the left, blue along the bottom
+LABEL_GRID = [(0.03, 0.64), (0.03, 0.42), (0.03, 0.20), (0.52, 0.20)]   # DIP PIP MCP WRIST label boxes (axes fraction)
 
 LAYOUT = [['top', 'side', 'box']]
 SIZE = (20, 7)
 
 
 def load():
-    return {'errors': dict(np.load(DATA / 'keypoint_errors_heldout.npz')),
-            'labels': dict(np.load(DATA / 'keypoint_labels_heldout.npz')),
+    return {'errors': dict(np.load(DATA / 'fig2_keypoint_errors.npz')),
+            'labels': dict(np.load(DATA / 'fig2_keypoint_labels.npz')),
             **{v: np.array(Image.open(ROOT / 'assets' / f'fig2_{v}.png').convert('RGB')) for v in ('top', 'side')}}
 
 
@@ -39,7 +37,6 @@ def panel_frame(ax, d, view):
     ax.set_axis_off()
     if view == 'top':
         ax.plot(man[:, 0], man[:, 1], color='white', lw=3.5, alpha=0.85, zorder=2)
-    h, w = img.shape[:2]
     for k, (kp, c) in enumerate(zip(kps, colors)):
         (x, y), (px, py) = man[k], pred[k]
         ax.scatter(x, y, s=200, color=c, edgecolors='white', linewidths=2, zorder=5, label=kp)
@@ -60,19 +57,6 @@ def panel_frame(ax, d, view):
     ax.keep_title = True                          # camera name: kept by compose
 
 
-def panel_hist(ax, d):
-    for kp, c in zip(KEYPOINTS, COLORS['keypoints']):
-        e = d['errors'][kp]
-        _, bins, _ = ax.hist(e, bins=15, alpha=0.6, color=c, label=f'{kp} (mean {e.mean():.2f} px)')
-        x = np.linspace(bins[0], bins[-1], 500)
-        ax.plot(x, gaussian_kde(e)(x) * len(e) * (bins[1] - bins[0]), color=c)
-    ax.axvline(THRESHOLD_PX, color='gray', ls='--', label=f'Smallest joint ({THRESHOLD_PX} px)')
-    ax.set_xlabel('Euclidean distance error (px)')
-    ax.set_ylabel('Count')
-    ax.set_title('Tracking error distribution')
-    ax.legend()
-
-
 def panel_box(ax, d):
     data = [d['errors'][kp] for kp in KEYPOINTS]
     bp = ax.boxplot(data, tick_labels=KEYPOINTS, widths=0.55, patch_artist=True, showfliers=False,
@@ -86,8 +70,7 @@ def panel_box(ax, d):
     ax.axhline(THRESHOLD_PX, color='gray', ls='--', label=f'Smallest joint ({THRESHOLD_PX} px)')
     ax.set_ylim(0, max(THRESHOLD_PX * 1.4, np.percentile(np.concatenate(data), 99.5)))
     ax.set_ylabel('Euclidean distance error (px)')
-    ax.set_title('Error per keypoint (held-out)')
-    ax.n_boxes = len(data)                        # compose() sets the width: same box width as figs 3/4
+    ax.n_boxes = len(data)                        # compose() sets the width from this
     ax.legend(loc='upper right')
     for kp, x in zip(KEYPOINTS, data):
         describe(ax, kp, x, unit='frame')
@@ -99,5 +82,5 @@ PANELS = {'top': partial(panel_frame, view='top'), 'side': partial(panel_frame, 
 
 
 def make_figure(cfg):
-    return compose(LAYOUT, PANELS, load(), SIZE, 'fig2_validation_heldout',
+    return compose(LAYOUT, PANELS, load(), SIZE, 'fig2_validation',
                    stats_bars=cfg['stats_bars'][2])

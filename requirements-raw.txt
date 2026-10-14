@@ -1,0 +1,8 @@
+# Extra packages for `generate_figs.py --from-raw` (on top of requirements.txt). neuraldecoding itself is installed
+# separately, see README. Versions below are the ones the shipped numbers were reproduced with.
+pynwb==3.1.3
+hdmf==4.3.1
+h5py==3.16.0
+omegaconf==2.3.0
+networkx==3.6.1
+PyWavelets==1.8.0
