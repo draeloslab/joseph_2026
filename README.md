@@ -1,52 +1,67 @@
 # Freebie: figure code, data and analysis
 
-Code and data that draw every figure in the paper (figures 2–6 and supplementary figures S1–S5), compute every statistic
-reported in them, and, optionally, recompute every number in them from the raw inputs. There are two packages:
+The code in this repository draws every figure in the paper (figures 2–6 and supplementary figures S1–S5), computes every
+statistic reported in them, and, optionally, recomputes every number in them from the raw inputs. The data come in two
+zip packages, downloaded separately from the code:
 
 | Package | Contents | Needed for |
 |---|---|---|
 | `figure_data.zip` | `data/` (the numbers behind each panel), `assets/` (the images shown in figures 2, 6, S1, S5) | drawing the figures and statistics |
 | `raw_data.zip` | `raw/` (per-trial, per-frame and per-run inputs, and trimmed NWB files) | recomputing `data/` from scratch (`--from-raw`) |
 
+Requires Python ≥ 3.10.
+
 ## Quick start: draw the figures and statistics
-```
-git clone https://github.com/draeloslab/joseph_2026 && cd joseph_2026
-python -m venv .venv && source .venv/bin/activate        # or: conda create -n freebie python=3.11 && conda activate freebie
-pip install -r requirements.txt
-# download figure_data.zip into this folder, then:
-unzip figure_data.zip                                     # creates data/ and assets/
-python scripts/generate_figs.py                           # every figure + its statistics -> figures/
-```
-Requires Python ≥ 3.10 
-`python scripts/generate_figs.py --figs 3 S2` draws just some figures.
+1. Clone the repository and enter it:
+   ```
+   git clone https://github.com/draeloslab/joseph_2026
+   cd joseph_2026
+   ```
+2. Create an environment and install the requirements:
+   ```
+   conda create -n freebie python=3.11
+   conda activate freebie
+   pip install -r requirements.txt
+   ```
+   (or `python -m venv .venv`, then activate it, instead of conda)
+3. Download `figure_data.zip` and unzip it inside the `joseph_2026` folder, so that `data/` and `assets/` sit next to
+   `scripts/` and `config.yaml`.
+4. Draw the figures:
+   ```
+   python scripts/generate_figs.py
+   ```
+   This writes every figure and its statistics to `figures/`. `python scripts/generate_figs.py --figs 3 S2` draws just
+   some of them.
 
 ## Recompute everything from the raw data
-`data/` is derived from `raw/` by the code in `scripts/analysis/`: online metrics (bit rate, time to target, ...), pipeline
-latency and dropped frames, Freebie-vs-bend correlations, offline Kalman filters. `--from-raw` reruns all of it, then draws
-every figure from the recomputed numbers.
-```
-# 1. the lab's neuraldecoding package
-git clone <neuraldecoding repository URL> ../neuraldecoding
-pip install -r ../neuraldecoding/requirements.txt && pip install -r requirements-raw.txt
-pip install -e ../neuraldecoding                          # or set NEURALDECODING_PATH to the clone instead
-# 2. the packages: figure_data.zip and raw_data.zip, both unzipped into this folder (creates data/, assets/, raw/)
-python scripts/generate_figs.py --from-raw                # about 20 minutes on one CPU core
-```
-- `data_from_raw/` has the layout of `data/`; `figures_from_raw/` the layout of `figures/`.
-- At the end the run compares every recomputed file with the shipped one. `figures_from_raw/rederivation_check.csv` lists
-  each as `identical`, `within tolerance` (relative difference ≤ 1e-6, floating-point
-  noise) or `DIFFERENT`.
-- `--figs` works here too: `python scripts/generate_figs.py --from-raw --figs 4 5`.
-- neuraldecoding is used for the online metrics (`neuraldecoding.utils.online_metrics`), for reading the NWB files, and
-  for training the Kalman filters. Its `requirements.txt` lists PyWavelets and it imports networkx without listing it,
-  both are in `requirements-raw.txt`.
+`data/` is derived from `raw/` by the code in `scripts/analysis/`. `--from-raw` reruns that analysis (online metrics,
+pipeline latency, Freebie-vs-bend correlations, offline Kalman filters) and draws every figure from the recomputed
+numbers. Do the Quick start first, or at least unzip `figure_data.zip` as in its step 3: the recomputed files are compared
+with the shipped ones in `data/`, and a few inputs are copied from it.
 
-### What the analysis does not recompute
-Three files of `data/` come from steps that start from video frames, which are not part of either package. They are
-copied unchanged into `data_from_raw/`:
-- `fig2_keypoint_labels.npz`: Freebie's prediction and the manual label on the two example frames of figure 2;
-- `fig6_fes.npz`: the keypoints and traces of the four example frames and the two line plots of figure 6;
-- `monkey_r/figS5_frame.json`: the live keypoint on the frame shown in figure S5A, and its position in the example trial.
+1. In the `joseph_2026` folder, install the lab's neuraldecoding package (https://github.com/Neuro-core-hub/neuraldecoding)
+   and the extra requirements:
+   ```
+   git clone https://github.com/Neuro-core-hub/neuraldecoding ../neuraldecoding
+   pip install -r ../neuraldecoding/requirements.txt
+   pip install -r requirements-raw.txt
+   pip install -e ../neuraldecoding
+   ```
+   (instead of the last line you can set the environment variable `NEURALDECODING_PATH` to the clone.)
+2. Download `raw_data.zip` and unzip it inside the `joseph_2026` folder; this creates `raw/`.
+3. Run the analysis (about 20 minutes on one CPU core):
+   ```
+   python scripts/generate_figs.py --from-raw
+   ```
+   `--figs` works here too: `python scripts/generate_figs.py --from-raw --figs 4 5`.
+
+This creates three new folders, leaving `data/` and `figures/` untouched:
+- `data_from_raw/`: the recomputed `data/` files, in the same layout as `data/`. Three files that start from video frames
+  (`fig2_keypoint_labels.npz`, `fig6_fes.npz`, `monkey_r/figS5_frame.json`) are not in either package's raw inputs and are
+  copied unchanged from `data/`.
+- `figures_from_raw/`: every figure and statistics file, drawn from `data_from_raw/`.
+- `figures_from_raw/rederivation_check.csv`: each recomputed file compared with the shipped one in `data/`, as `identical`,
+  `within tolerance` (relative difference ≤ 1e-6, floating-point noise) or `DIFFERENT`.
 
 ### What `raw/` holds
 | Path | Content | Feeds |
@@ -106,6 +121,12 @@ to the stats files either way) and the settings of the analysis (`analysis:`).
 | S4 | `run_metrics.csv`, `run_trial_metrics.csv`, `offline_kf.csv`, `figS4_example_{freebie,bend}_trace.npz` + `_trials.csv` |
 | S5 | `monkey_r/figS5_run_metrics.csv`, `monkey_r/figS5_trial_metrics.csv`, `monkey_r/figS5_frame.json`; `assets/figS5_frame.png` |
 
+- **Latency tables**: `latency_runs.csv` and `latency_stage_summary.csv` give the mean time (ms) of each pipeline stage
+  (frame acquisition, inference, sender) and end to end, per run or per session; `latency_drops.csv` counts missing and
+  skipped frames per run. `*e2e*.npz` hold the end-to-end latency of every frame.
+- **Correlation and offline-decoder tables**: `sensor_corr.csv` and `freebie_bend_corr.csv` hold the correlation between
+  Freebie and the bend sensors per run or session; `offline_kf.csv` the validation error and correlation of offline Kalman
+  filters trained on each sensor.
 - **Run and trial tables** hold one row per run or per trial, with the online metrics: success rate, bit rate (bits/s),
   targets per second, time to target (s), orbiting time (s) and path efficiency. Success rate and targets per second
   have no per-trial value, so the trial tables give the running rate up to each trial (`*_running`).

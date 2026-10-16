@@ -31,7 +31,7 @@ MAX_TICKS = 4       # automatic tick locators get at most this many ticks
 
 # ---------------------------------------------------------------- config + style
 def load_config(path=ROOT / 'config.yaml'):
-    with open(path) as f:
+    with open(path, encoding='utf-8') as f:
         return yaml.safe_load(f)
 
 
@@ -140,7 +140,7 @@ def _save(fig, name, w_mm):
     w_pt, h_pt = float(m.group(1)), float(m.group(2))
     svg = svg.replace(f'width="{m.group(1)}pt" height="{m.group(2)}pt"',
                       f'width="{w_mm:.2f}mm" height="{w_mm * h_pt / w_pt:.2f}mm"', 1)
-    (FIGS / f'{name}.svg').write_text(svg)
+    (FIGS / f'{name}.svg').write_text(svg, encoding='utf-8')
     fig.savefig(FIGS / f'{name}.png', bbox_inches='tight', dpi=STYLE['dpi'] * width_in / (w_pt / 72))
 
 

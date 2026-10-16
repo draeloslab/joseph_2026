@@ -37,7 +37,7 @@ GAP_IN = 1.5                   # between the frame and the bit-rate axes: the y 
 # ---------------------------------------------------------------- figure
 def load(cfg):
     return {'runs': pd.read_csv(OUT / 'figS5_run_metrics.csv'), 'trials': pd.read_csv(OUT / 'figS5_trial_metrics.csv'),
-            'frame': json.loads((OUT / 'figS5_frame.json').read_text()), 'img': plt.imread(ROOT / 'assets' / 'figS5_frame.png')}
+            'frame': json.loads((OUT / 'figS5_frame.json').read_text(encoding='utf-8')), 'img': plt.imread(ROOT / 'assets' / 'figS5_frame.png')}
 
 
 def panel_frame(ax, d):
